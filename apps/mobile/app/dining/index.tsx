@@ -1,6 +1,8 @@
+import { Redirect } from 'expo-router';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { isTransitStandalone } from '@/constants/features';
 
 const RESTAURANTS = [
   { id: '1', name: 'Restaurant Timișoreana', cuisine: 'Romanian', rating: 4.4, price: 2, neighborhood: 'Cetate' },
@@ -14,6 +16,10 @@ const RESTAURANTS = [
 ];
 
 export default function DiningScreen() {
+  if (isTransitStandalone) {
+    return <Redirect href="/transit" />;
+  }
+
   const [search, setSearch] = useState('');
 
   const filtered = RESTAURANTS.filter((r) =>

@@ -4,7 +4,6 @@
     "slug": "timisoara-app",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "scheme": "timisoara",
     "userInterfaceStyle": "automatic",
     "splash": {

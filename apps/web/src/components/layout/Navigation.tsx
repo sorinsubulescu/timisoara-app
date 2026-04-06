@@ -4,18 +4,20 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bus, Calendar, Compass, UtensilsCrossed, User, Flower2 } from 'lucide-react';
+import { appTagline, appTitle, enabledSections, homeHref } from '@/lib/features';
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/', label: 'Explore', icon: Compass },
-  { href: '/events', label: 'Events', icon: Calendar },
-  { href: '/transit', label: 'Transit', icon: Bus },
-  { href: '/dining', label: 'Dining', icon: UtensilsCrossed },
-  { href: '/profile', label: 'Profile', icon: User },
+  { key: 'explore', href: '/', label: 'Explore', icon: Compass },
+  { key: 'events', href: '/events', label: 'Events', icon: Calendar },
+  { key: 'transit', href: '/transit', label: 'Transit', icon: Bus },
+  { key: 'dining', href: '/dining', label: 'Dining', icon: UtensilsCrossed },
+  { key: 'profile', href: '/profile', label: 'Profile', icon: User },
 ] as const;
 
 export default function Navigation({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const visibleNavItems = navItems.filter((item) => enabledSections.includes(item.key));
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);
@@ -26,22 +28,22 @@ export default function Navigation({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 hidden border-b border-white/20 bg-white/80 shadow-glass backdrop-blur-xl md:block">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 lg:px-6">
           <Link
-            href="/"
+            href={homeHref}
             className="flex items-center gap-2 transition hover:opacity-80"
           >
             <Flower2 className="h-6 w-6 text-primary-500" />
             <div className="flex flex-col">
               <span className="text-lg font-bold tracking-tight text-gray-900">
-                Timișoara
+                {appTitle}
               </span>
               <span className="hidden text-[10px] font-medium leading-none tracking-wider text-gray-400 lg:block">
-                CITY OF ROSES
+                {appTagline}
               </span>
             </div>
           </Link>
 
           <ul className="flex items-center gap-1">
-            {navItems.map(({ href, label, icon: Icon }) => {
+            {visibleNavItems.map(({ href, label, icon: Icon }) => {
               const active = isActive(href);
               return (
                 <li key={href}>
@@ -77,7 +79,7 @@ export default function Navigation({ children }: { children: ReactNode }) {
         aria-label="Main"
       >
         <ul className="mx-auto flex max-w-lg items-stretch justify-around px-2 pt-2">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {visibleNavItems.map(({ href, label, icon: Icon }) => {
             const active = isActive(href);
             return (
               <li key={href} className="flex-1">

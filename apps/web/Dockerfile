@@ -10,8 +10,10 @@ RUN npm install
 # --- Build stage ---
 FROM base AS build
 WORKDIR /app
+ARG NEXT_PUBLIC_STANDALONE_TRANSIT=false
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_STANDALONE_TRANSIT=$NEXT_PUBLIC_STANDALONE_TRANSIT
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -30,8 +32,10 @@ RUN STANDALONE_SERVER=$(find .next/standalone -name "server.js" -not -path "*/no
 # --- Production stage ---
 FROM base AS production
 WORKDIR /app
+ARG NEXT_PUBLIC_STANDALONE_TRANSIT=false
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_STANDALONE_TRANSIT=$NEXT_PUBLIC_STANDALONE_TRANSIT
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
