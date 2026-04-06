@@ -1,0 +1,85 @@
+services:
+  # --- Database ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: timisoara-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: timisoara_app
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - timisoara-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: timisoara-redis
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - timisoara-net
+
+  # --- Backend API ---
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: timisoara-api
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/timisoara_app?schema=public
+      PORT: '4000'
+      CORS_ORIGIN: http://localhost:3000
+      NODE_ENV: production
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/api/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - timisoara-net
+
+  # --- Web App ---
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: timisoara-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NODE_ENV: production
+    ports:
+      - '3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - timisoara-net
+
+volumes:
+  pgdata:
+
+networks:
+  timisoara-net:
+    driver: bridge

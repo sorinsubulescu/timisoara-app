@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Timișoara App",
+    "slug": "timisoara-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "timisoara",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#ec6c21",
+      "resizeMode": "contain"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.timisoara.app",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ec6c21"
+      },
+      "package": "com.timisoara.app"
+    },
+    "plugins": ["expo-router"]
+  }
+}

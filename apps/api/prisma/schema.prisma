@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Poi {
+  id           String    @id @default(cuid())
+  name         String
+  description  String
+  category     String
+  latitude     Float
+  longitude    Float
+  address      String
+  phone        String?
+  website      String?
+  openingHours String?   @map("opening_hours")
+  rating       Float?
+  imageUrl     String?   @map("image_url")
+  neighborhood String?
+  popularity   Float     @default(0)
+  tags         String[]
+  osmId        BigInt?   @unique @map("osm_id")
+  source       String    @default("seed")
+  syncedAt     DateTime? @map("synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  favorites FavoritePoi[]
+
+  @@map("pois")
+}
+
+model Event {
+  id             String    @id @default(cuid())
+  title          String
+  description    String
+  category       String
+  startDate      DateTime  @map("start_date")
+  endDate        DateTime? @map("end_date")
+  venue          String
+  venueAddress   String    @map("venue_address")
+  latitude       Float?
+  longitude      Float?
+  ticketUrl      String?   @map("ticket_url")
+  imageUrl       String?   @map("image_url")
+  isFree         Boolean   @default(false) @map("is_free")
+  price          String?
+  tags           String[]
+  submitterName  String?   @map("submitter_name")
+  submitterEmail String?   @map("submitter_email")
+  status         String    @default("approved")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  favorites FavoriteEvent[]
+
+  @@map("events")
+}
+
+model TransitLine {
+  id         String    @id @default(cuid())
+  lineNumber String    @map("line_number")
+  type       String
+  name       String
+  color      String?
+  geometry   Json?     @map("geometry")
+  osmId      BigInt?   @unique @map("osm_id")
+  source     String    @default("seed")
+  syncedAt   DateTime? @map("synced_at")
+
+  stops TransitLineStop[]
+
+  @@map("transit_lines")
+}
+
+model TransitStop {
+  id        String    @id @default(cuid())
+  name      String
+  latitude  Float
+  longitude Float
+  osmId     BigInt?   @unique @map("osm_id")
+  source    String    @default("seed")
+  syncedAt  DateTime? @map("synced_at")
+
+  lines TransitLineStop[]
+
+  @@map("transit_stops")
+}
+
+model TransitLineStop {
+  lineId    String @map("line_id")
+  stopId    String @map("stop_id")
+  stopOrder Int    @map("stop_order")
+
+  line TransitLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  stop TransitStop @relation(fields: [stopId], references: [id], onDelete: Cascade)
+
+  @@id([lineId, stopId])
+  @@map("transit_line_stops")
+}
+
+model Restaurant {
+  id           String    @id @default(cuid())
+  name         String
+  description  String
+  cuisine      String[]
+  priceRange   Int       @default(0) @map("price_range")
+  latitude     Float
+  longitude    Float
+  address      String
+  phone        String?
+  website      String?
+  openingHours Json?     @map("opening_hours")
+  rating       Float?
+  imageUrl     String?   @map("image_url")
+  neighborhood String?
+  popularity   Float     @default(0)
+  features     String[]
+  osmId        BigInt?   @unique @map("osm_id")
+  source       String    @default("seed")
+  syncedAt     DateTime? @map("synced_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("restaurants")
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String
+  passwordHash    String   @map("password_hash")
+  mode            String   @default("tourist")
+  language        String   @default("en")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  favoritePois   FavoritePoi[]
+  favoriteEvents FavoriteEvent[]
+
+  @@map("users")
+}
+
+model FavoritePoi {
+  userId String @map("user_id")
+  poiId  String @map("poi_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poi  Poi  @relation(fields: [poiId], references: [id], onDelete: Cascade)
+
+  @@id([userId, poiId])
+  @@map("favorite_pois")
+}
+
+model FavoriteEvent {
+  userId  String @map("user_id")
+  eventId String @map("event_id")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@id([userId, eventId])
+  @@map("favorite_events")
+}
