@@ -17,5 +17,8 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "metro": "0.81.5"
   }
 }
