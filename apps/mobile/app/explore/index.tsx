@@ -1,6 +1,8 @@
+import { Redirect } from 'expo-router';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { isTransitStandalone } from '@/constants/features';
 
 const PRIMARY = '#ec6c21';
 const CATEGORIES = [
@@ -22,6 +24,10 @@ const SAMPLE_POIS = [
 ];
 
 export default function ExploreScreen() {
+  if (isTransitStandalone) {
+    return <Redirect href="/transit" />;
+  }
+
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
 

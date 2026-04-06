@@ -55,6 +55,29 @@ npm run dev:api
 npm run dev:web
 ```
 
+### Feature Flags
+
+You can ship a transit-only version of the app while the other sections are still in progress.
+
+- **Web:** set `NEXT_PUBLIC_STANDALONE_TRANSIT=true`
+- **Mobile:** set `EXPO_PUBLIC_STANDALONE_TRANSIT=true`
+
+When enabled:
+
+- the web navigation only shows `Transit`
+- `/`, `/events`, `/dining`, and `/profile` redirect to `/transit` on web
+- the mobile app only shows the `Transit` tab
+- direct mobile navigation to disabled screens redirects back to `transit`
+
+For Docker builds, the web app reads `NEXT_PUBLIC_STANDALONE_TRANSIT` during `docker compose up --build`.
+
+Example:
+
+```bash
+NEXT_PUBLIC_STANDALONE_TRANSIT=true docker compose up --build web
+EXPO_PUBLIC_STANDALONE_TRANSIT=true npm run start --workspace=apps/mobile
+```
+
 ## License
 
 MIT

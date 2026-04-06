@@ -1,10 +1,16 @@
+import { Redirect } from 'expo-router';
 import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { isTransitStandalone } from '@/constants/features';
 
 const PRIMARY = '#ec6c21';
 
 export default function ProfileScreen() {
+  if (isTransitStandalone) {
+    return <Redirect href="/transit" />;
+  }
+
   const [mode, setMode] = useState<'tourist' | 'local'>('tourist');
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);

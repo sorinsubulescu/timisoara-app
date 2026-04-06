@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import { Inter } from 'next/font/google';
 import Navigation from '@/components/layout/Navigation';
+import { appDescription, appTitle, isTransitStandalone } from '@/lib/features';
 import './globals.css';
 
 const inter = Inter({
@@ -10,9 +11,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Timișoara — City of Roses',
-  description:
-    'Your local companion for exploring Timișoara — maps, events, transit, dining, and more.',
+  title: isTransitStandalone ? `${appTitle} — Timișoara` : 'Timișoara — City of Roses',
+  description: appDescription,
 };
 
 export const viewport: Viewport = {

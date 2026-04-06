@@ -1,6 +1,8 @@
+import { Redirect } from 'expo-router';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { isTransitStandalone } from '@/constants/features';
 
 const PRIMARY = '#ec6c21';
 
@@ -20,6 +22,10 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function EventsScreen() {
+  if (isTransitStandalone) {
+    return <Redirect href="/transit" />;
+  }
+
   const [search, setSearch] = useState('');
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
