@@ -1,4 +1,4 @@
-name: EAS iOS Preview Build
+name: EAS iOS Local Build
 
 on:
   workflow_dispatch:
@@ -21,9 +21,11 @@ concurrency:
 
 jobs:
   build-ios-preview:
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     timeout-minutes: 120
     env:
+      CI: '1'
+      COCOAPODS_DISABLE_STATS: 'true'
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
     steps:
@@ -35,6 +37,14 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+          pod --version
+          fastlane --version
 
       - name: Validate Expo token
         run: |
@@ -53,51 +63,48 @@ jobs:
         working-directory: apps/mobile
         run: npx eas-cli@latest whoami
 
-      - name: Start and wait for iOS build
+      - name: Build iOS app locally with EAS
         id: build
         working-directory: apps/mobile
         run: |
           set -euo pipefail
 
-          build_json_file="$RUNNER_TEMP/eas-ios-build.json"
+          artifact_dir="$RUNNER_TEMP/eas-local-artifacts"
+          artifact_path="$artifact_dir/timisoara-ios-${{ inputs.profile }}.ipa"
 
+          mkdir -p "$artifact_dir"
+
+          export EAS_LOCAL_BUILD_ARTIFACTS_DIR="$artifact_dir"
           npx eas-cli@latest build \
             --platform ios \
             --profile "${{ inputs.profile }}" \
+            --local \
             --non-interactive \
-            --wait \
-            --json \
-            --message "GitHub Actions iOS ${GITHUB_SHA::7}" \
-            > "$build_json_file"
+            --output "$artifact_path"
 
-          node - "$build_json_file" <<'NODE' >> "$GITHUB_OUTPUT"
-          const fs = require('node:fs');
+          if [[ ! -f "$artifact_path" ]]; then
+            echo "Local EAS build did not produce an IPA at $artifact_path"
+            exit 1
+          fi
 
-          const buildJsonPath = process.argv[2];
-          const raw = fs.readFileSync(buildJsonPath, 'utf8').trim();
-          const parsed = JSON.parse(raw);
-          const build = Array.isArray(parsed) ? parsed[0] : parsed;
+          {
+            echo "build_profile=${{ inputs.profile }}"
+            echo "artifact_path=$artifact_path"
+            echo "artifact_name=$(basename "$artifact_path")"
+          } >> "$GITHUB_OUTPUT"
 
-          if (!build) {
-            throw new Error('EAS build response did not include a build object');
-          }
-
-          const artifacts = build.artifacts ?? {};
-          const buildUrl = artifacts.buildUrl ?? artifacts.applicationArchiveUrl ?? '';
-
-          console.log(`build_id=${build.id ?? ''}`);
-          console.log(`build_status=${build.status ?? ''}`);
-          console.log(`build_profile=${build.buildProfile ?? ''}`);
-          console.log(`build_url=${buildUrl}`);
-          NODE
+      - name: Upload local iOS artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-local-${{ inputs.profile }}
+          path: ${{ steps.build.outputs.artifact_path }}
 
       - name: Summarize build
         run: |
           {
-            echo "## EAS iOS Build"
+            echo "## EAS iOS Local Build"
             echo ""
             echo "- Profile: ${{ steps.build.outputs.build_profile }}"
-            echo "- Build ID: ${{ steps.build.outputs.build_id }}"
-            echo "- Status: ${{ steps.build.outputs.build_status }}"
-            echo "- Artifact: ${{ steps.build.outputs.build_url }}"
+            echo "- Artifact name: ${{ steps.build.outputs.artifact_name }}"
+            echo "- Uploaded artifact: ios-local-${{ inputs.profile }}"
           } >> "$GITHUB_STEP_SUMMARY"
