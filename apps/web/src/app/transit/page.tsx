@@ -36,17 +36,48 @@ const RouteMap = dynamic(() => import('@/components/map/RouteMap'), {
 
 type TransitType = 'all' | 'tram' | 'bus' | 'trolleybus';
 
+type TransitCategory = Exclude<TransitTypeExtended, 'all'>;
+
+type TransitTypeExtended =
+  | 'all'
+  | 'tram'
+  | 'bus'
+  | 'trolleybus'
+  | 'express'
+  | 'metropolitan'
+  | 'school'
+  | 'vaporetto';
+
 const TYPE_ICONS: Record<string, typeof Train> = {
   tram: Train,
   bus: Bus,
   trolleybus: Zap,
+  express: Bus,
+  metropolitan: Bus,
+  school: Bus,
+  vaporetto: Navigation,
 };
 
 const TYPE_LABELS: Record<string, string> = {
   tram: 'Tram',
   bus: 'Bus',
   trolleybus: 'Trolleybus',
+  express: 'Express',
+  metropolitan: 'Metropolitan',
+  school: 'School',
+  vaporetto: 'Vaporetto',
 };
+
+const TRANSIT_TABS: { value: TransitTypeExtended; label: string; icon: typeof Train }[] = [
+  { value: 'all', label: 'All', icon: MapPin },
+  { value: 'tram', label: 'Trams', icon: Train },
+  { value: 'bus', label: 'Buses', icon: Bus },
+  { value: 'trolleybus', label: 'Trolley', icon: Zap },
+  { value: 'express', label: 'Express', icon: Bus },
+  { value: 'metropolitan', label: 'Metro', icon: Bus },
+  { value: 'school', label: 'School', icon: Bus },
+  { value: 'vaporetto', label: 'Boat', icon: Navigation },
+];
 
 const CHUNK_SIZE = 20;
 
@@ -75,6 +106,8 @@ interface DisplayLine {
 }
 
 function directionLabel(name: string, lineNumber: string): string {
+  const explicit = name.match(/^(Tur|Retur):\s*(.+?)\s*(?:=>|→|->)\s*(.+)$/i);
+  if (explicit) return `${explicit[1]}: ${explicit[2].trim()} → ${explicit[3].trim()}`;
   const arrow = name.match(/:\s*(.+?)\s*(?:=>|→|->)\s*(.+)$/);
   if (arrow) return `${arrow[1].trim()} → ${arrow[2].trim()}`;
   const dash = name.match(/:\s*(.+?)\s*(?:—|-)\s*(.+)$/);
@@ -135,7 +168,7 @@ function deduplicateLines(lines: DisplayLine[]): DisplayLine[] {
 
     for (const variant of variants) {
       for (const dir of variant.directions) {
-        const key = dir.stops.map((s) => s.name).join('|');
+        const key = `${dir.name}|${dir.stops.map((s) => s.id).join('|')}`;
         if (!seenKeys.has(key) && dir.stops.length > 0) {
           seenKeys.add(key);
           allDirections.push(dir);
@@ -896,7 +929,7 @@ function LineCard({
 
 export default function TransitPage() {
   const [search, setSearch] = useState('');
-  const [activeType, setActiveType] = useState<TransitType>('all');
+  const [activeType, setActiveType] = useState<TransitTypeExtended>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeDir, setActiveDir] = useState<Record<string, number>>({});
   const [allLines, setAllLines] = useState<DisplayLine[]>([]);
@@ -961,9 +994,18 @@ export default function TransitPage() {
   }, [expandedId, allLines]);
 
   const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: allLines.length, tram: 0, bus: 0, trolleybus: 0 };
+    const counts: Record<TransitTypeExtended, number> = {
+      all: allLines.length,
+      tram: 0,
+      bus: 0,
+      trolleybus: 0,
+      express: 0,
+      metropolitan: 0,
+      school: 0,
+      vaporetto: 0,
+    };
     for (const l of allLines) {
-      if (l.type in counts) counts[l.type]++;
+      if (l.type in counts) counts[l.type as TransitCategory]++;
     }
     return counts;
   }, [allLines]);
@@ -998,13 +1040,6 @@ export default function TransitPage() {
   const sentinelRef = useInfiniteScroll(handleLoadMore, {
     enabled: hasMore && !initialLoading,
   });
-
-  const TABS: { value: TransitType; label: string; icon: typeof Train }[] = [
-    { value: 'all', label: 'All', icon: MapPin },
-    { value: 'tram', label: 'Trams', icon: Train },
-    { value: 'bus', label: 'Buses', icon: Bus },
-    { value: 'trolleybus', label: 'Trolley', icon: Zap },
-  ];
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-24 pt-6 animate-fade-in">
@@ -1043,14 +1078,15 @@ export default function TransitPage() {
       />
 
       {/* ── Filter tabs ── */}
-      <div className="mb-5 flex gap-1.5 rounded-xl bg-warm-100/60 p-1 backdrop-blur-sm">
-        {TABS.map(({ value, label, icon: Icon }) => (
+      <div className="mb-5 overflow-x-auto rounded-xl bg-warm-100/60 p-1 backdrop-blur-sm">
+        <div className="flex min-w-max gap-1.5">
+        {TRANSIT_TABS.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
             type="button"
             onClick={() => setActiveType(value)}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-semibold transition-all duration-200',
+              'flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition-all duration-200',
               activeType === value
                 ? 'bg-white text-gray-900 shadow-sm'
                 : 'text-gray-400 hover:text-gray-600',
@@ -1070,6 +1106,7 @@ export default function TransitPage() {
             </span>
           </button>
         ))}
+        </div>
       </div>
 
       {/* ── Content ── */}

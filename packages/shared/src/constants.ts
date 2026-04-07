@@ -45,9 +45,13 @@ export const EVENT_CATEGORIES = [
 ] as const;
 
 export const TRANSPORT_TYPES = [
-  { value: 'tram', label: 'Tram', color: '#e74c3c' },
-  { value: 'bus', label: 'Bus', color: '#3498db' },
-  { value: 'trolleybus', label: 'Trolleybus', color: '#2ecc71' },
+  { value: 'tram', label: 'Tram', color: '#E3A900' },
+  { value: 'bus', label: 'Urban Bus', color: '#4D897F' },
+  { value: 'trolleybus', label: 'Trolleybus', color: '#6F2095' },
+  { value: 'express', label: 'Express Bus', color: '#F58134' },
+  { value: 'metropolitan', label: 'Metropolitan', color: '#0148A2' },
+  { value: 'school', label: 'School Bus', color: '#E31E25' },
+  { value: 'vaporetto', label: 'Vaporetto', color: '#2DB8C5' },
 ] as const;
 
 export const NEIGHBORHOODS = [

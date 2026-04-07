@@ -5,7 +5,15 @@ import type {
   ApiVehiclePosition,
 } from '@/lib/api';
 
-export type FilterType = 'all' | 'tram' | 'bus' | 'trolleybus';
+export type FilterType =
+  | 'all'
+  | 'tram'
+  | 'bus'
+  | 'trolleybus'
+  | 'express'
+  | 'metropolitan'
+  | 'school'
+  | 'vaporetto';
 export type StopStatus = 'vehicleHere' | 'approaching';
 
 export interface Coordinate {
@@ -59,9 +67,13 @@ interface StopAnnotation {
 }
 
 const TYPE_COLORS: Record<Exclude<FilterType, 'all'>, string> = {
-  tram: '#E30613',
-  bus: '#059669',
-  trolleybus: '#DC2626',
+  tram: '#E3A900',
+  bus: '#4D897F',
+  trolleybus: '#6F2095',
+  express: '#F58134',
+  metropolitan: '#0148A2',
+  school: '#E31E25',
+  vaporetto: '#2DB8C5',
 };
 
 function normalizeStopName(name: string): string {
@@ -75,6 +87,8 @@ function normalizeStopName(name: string): string {
 }
 
 function directionLabel(name: string, lineNumber: string): string {
+  const explicit = name.match(/^(Tur|Retur):\s*(.+?)\s*(?:=>|→|->)\s*(.+)$/i);
+  if (explicit) return `${explicit[1]}: ${explicit[2].trim()} → ${explicit[3].trim()}`;
   const arrow = name.match(/:\s*(.+?)\s*(?:=>|→|->)\s*(.+)$/);
   if (arrow) return `${arrow[1].trim()} → ${arrow[2].trim()}`;
   const dash = name.match(/:\s*(.+?)\s*(?:—|-)\s*(.+)$/);
@@ -158,7 +172,7 @@ function deduplicateLines(lines: TransitLine[]): TransitLine[] {
 
     for (const variant of variants) {
       for (const direction of variant.directions) {
-        const key = direction.stops.map((stop) => stop.name).join('|');
+        const key = `${direction.label}|${direction.stops.map((stop) => stop.id).join('|')}`;
         if (direction.stops.length > 0 && !seenDirections.has(key)) {
           seenDirections.add(key);
           directions.push(direction);

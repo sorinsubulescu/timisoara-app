@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { isTransitStandalone } from '@/constants/features';
+import { useI18n } from '@/lib/i18n';
 
 const RESTAURANTS = [
   { id: '1', name: 'Restaurant Timișoreana', cuisine: 'Romanian', rating: 4.4, price: 2, neighborhood: 'Cetate' },
@@ -16,6 +17,8 @@ const RESTAURANTS = [
 ];
 
 export default function DiningScreen() {
+  const { t } = useI18n();
+
   if (isTransitStandalone) {
     return <Redirect href="/transit" />;
   }
@@ -33,7 +36,7 @@ export default function DiningScreen() {
         <Ionicons name="search" size={18} color="#9ca3af" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search restaurants..."
+          placeholder={t('dining.searchPlaceholder')}
           placeholderTextColor="#9ca3af"
           value={search}
           onChangeText={setSearch}

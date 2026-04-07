@@ -382,43 +382,42 @@ export class SyncService {
 
   async syncTransitLines(
     lines: Array<{
-      osmId: number;
+      osmId: number | bigint;
       lineNumber: string;
       type: string;
       name: string;
       color: string;
-      stops: Array<{ osmId: number; name: string; latitude: number; longitude: number; stopOrder: number }>;
+      stops: Array<{ osmId: number | bigint; name: string; latitude: number; longitude: number; stopOrder: number }>;
       geometry?: [number, number][];
     }>,
+    source = 'osm',
   ): Promise<number> {
     const now = new Date();
     let upserted = 0;
 
     for (const line of lines) {
       try {
-        const geoValue: Prisma.InputJsonValue | typeof Prisma.JsonNull =
-          line.geometry && line.geometry.length > 0
-            ? (line.geometry as Prisma.InputJsonValue)
-            : Prisma.JsonNull;
+        const geoValue = line.geometry && line.geometry.length > 0 ? (line.geometry as any) : null;
+        const lineId = this.toBigIntId(line.osmId);
         const dbLine = await this.prisma.transitLine.upsert({
-          where: { osmId: BigInt(line.osmId) },
+          where: { osmId: lineId },
           update: {
             lineNumber: line.lineNumber,
             type: line.type,
             name: line.name,
             color: line.color,
             geometry: geoValue,
-            source: 'osm',
+            source,
             syncedAt: now,
           },
           create: {
-            osmId: BigInt(line.osmId),
+            osmId: lineId,
             lineNumber: line.lineNumber,
             type: line.type,
             name: line.name,
             color: line.color,
             geometry: geoValue,
-            source: 'osm',
+            source,
             syncedAt: now,
           },
         });
@@ -427,21 +426,22 @@ export class SyncService {
         await this.prisma.transitLineStop.deleteMany({ where: { lineId: dbLine.id } });
 
         for (const stop of line.stops) {
+          const stopId = this.toBigIntId(stop.osmId);
           const dbStop = await this.prisma.transitStop.upsert({
-            where: { osmId: BigInt(stop.osmId) },
+            where: { osmId: stopId },
             update: {
               name: stop.name,
               latitude: stop.latitude,
               longitude: stop.longitude,
-              source: 'osm',
+              source,
               syncedAt: now,
             },
             create: {
-              osmId: BigInt(stop.osmId),
+              osmId: stopId,
               name: stop.name,
               latitude: stop.latitude,
               longitude: stop.longitude,
-              source: 'osm',
+              source,
               syncedAt: now,
             },
           });
@@ -465,5 +465,9 @@ export class SyncService {
 
     this.logger.log(`Synced ${upserted}/${lines.length} transit lines to DB`);
     return upserted;
+  }
+
+  private toBigIntId(value: number | bigint): bigint {
+    return typeof value === 'bigint' ? value : BigInt(value);
   }
 }

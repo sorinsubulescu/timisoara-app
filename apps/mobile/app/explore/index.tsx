@@ -1,35 +1,49 @@
 import { Redirect } from 'expo-router';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { isTransitStandalone } from '@/constants/features';
+import { useI18n } from '@/lib/i18n';
 
 const PRIMARY = '#ec6c21';
 const CATEGORIES = [
-  { label: 'All', icon: 'grid-outline' },
-  { label: 'Landmarks', icon: 'business-outline' },
-  { label: 'Museums', icon: 'library-outline' },
-  { label: 'Parks', icon: 'leaf-outline' },
-  { label: 'Restaurants', icon: 'restaurant-outline' },
-  { label: 'Cafes', icon: 'cafe-outline' },
+  { value: 'all', icon: 'grid-outline' },
+  { value: 'landmarks', icon: 'business-outline' },
+  { value: 'museums', icon: 'library-outline' },
+  { value: 'parks', icon: 'leaf-outline' },
+  { value: 'restaurants', icon: 'restaurant-outline' },
+  { value: 'cafes', icon: 'cafe-outline' },
 ] as const;
 
 const SAMPLE_POIS = [
-  { id: '1', name: 'Catedrala Mitropolitană', category: 'Landmark', rating: 4.8, neighborhood: 'Cetate' },
-  { id: '2', name: 'Piața Unirii', category: 'Landmark', rating: 4.9, neighborhood: 'Cetate' },
-  { id: '3', name: 'Castelul Huniade', category: 'Museum', rating: 4.5, neighborhood: 'Cetate' },
-  { id: '4', name: 'Parcul Rozelor', category: 'Park', rating: 4.6, neighborhood: 'Cetate' },
-  { id: '5', name: 'Parcul Botanic', category: 'Park', rating: 4.4, neighborhood: 'Elisabetin' },
-  { id: '6', name: 'Teatrul Național', category: 'Theater', rating: 4.7, neighborhood: 'Cetate' },
+  { id: '1', name: 'Catedrala Mitropolitană', category: 'landmark', rating: 4.8, neighborhood: 'Cetate' },
+  { id: '2', name: 'Piața Unirii', category: 'landmark', rating: 4.9, neighborhood: 'Cetate' },
+  { id: '3', name: 'Castelul Huniade', category: 'museum', rating: 4.5, neighborhood: 'Cetate' },
+  { id: '4', name: 'Parcul Rozelor', category: 'park', rating: 4.6, neighborhood: 'Cetate' },
+  { id: '5', name: 'Parcul Botanic', category: 'park', rating: 4.4, neighborhood: 'Elisabetin' },
+  { id: '6', name: 'Teatrul Național', category: 'theater', rating: 4.7, neighborhood: 'Cetate' },
 ];
 
 export default function ExploreScreen() {
+  const { t } = useI18n();
+
   if (isTransitStandalone) {
     return <Redirect href="/transit" />;
   }
 
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const categories = useMemo(
+    () => [
+      { value: 'all', label: t('common.all'), icon: 'grid-outline' },
+      { value: 'landmarks', label: t('explore.landmarks'), icon: 'business-outline' },
+      { value: 'museums', label: t('explore.museums'), icon: 'library-outline' },
+      { value: 'parks', label: t('explore.parks'), icon: 'leaf-outline' },
+      { value: 'restaurants', label: t('explore.restaurants'), icon: 'restaurant-outline' },
+      { value: 'cafes', label: t('explore.cafes'), icon: 'cafe-outline' },
+    ],
+    [t],
+  );
 
   return (
     <View style={styles.container}>
@@ -37,7 +51,7 @@ export default function ExploreScreen() {
         <Ionicons name="search" size={18} color="#9ca3af" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search Timișoara..."
+          placeholder={t('explore.searchPlaceholder')}
           placeholderTextColor="#9ca3af"
           value={search}
           onChangeText={setSearch}
@@ -45,18 +59,18 @@ export default function ExploreScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pills}>
-        {CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <TouchableOpacity
-            key={cat.label}
-            style={[styles.pill, activeCategory === cat.label && styles.pillActive]}
-            onPress={() => setActiveCategory(cat.label)}
+            key={cat.value}
+            style={[styles.pill, activeCategory === cat.value && styles.pillActive]}
+            onPress={() => setActiveCategory(cat.value)}
           >
             <Ionicons
               name={cat.icon as any}
               size={14}
-              color={activeCategory === cat.label ? '#fff' : '#374151'}
+              color={activeCategory === cat.value ? '#fff' : '#374151'}
             />
-            <Text style={[styles.pillText, activeCategory === cat.label && styles.pillTextActive]}>
+            <Text style={[styles.pillText, activeCategory === cat.value && styles.pillTextActive]}>
               {cat.label}
             </Text>
           </TouchableOpacity>
@@ -65,11 +79,11 @@ export default function ExploreScreen() {
 
       <View style={styles.mapPlaceholder}>
         <Ionicons name="map" size={48} color="#d1d5db" />
-        <Text style={styles.mapText}>Interactive Map</Text>
-        <Text style={styles.mapSubtext}>Map will render with react-native-maps</Text>
+        <Text style={styles.mapText}>{t('explore.mapTitle')}</Text>
+        <Text style={styles.mapSubtext}>{t('explore.mapSubtitle')}</Text>
       </View>
 
-      <Text style={styles.sectionTitle}>Nearby Places</Text>
+      <Text style={styles.sectionTitle}>{t('explore.nearbyPlaces')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.poiScroll}>
         {SAMPLE_POIS.map((poi) => (
           <TouchableOpacity key={poi.id} style={styles.poiCard}>
@@ -78,7 +92,7 @@ export default function ExploreScreen() {
             </View>
             <View style={styles.poiContent}>
               <Text style={styles.poiName} numberOfLines={1}>{poi.name}</Text>
-              <Text style={styles.poiCategory}>{poi.category}</Text>
+              <Text style={styles.poiCategory}>{t(`explore.poi.${poi.category}`)}</Text>
               <View style={styles.poiRow}>
                 <Ionicons name="star" size={12} color="#f59e0b" />
                 <Text style={styles.poiRating}>{poi.rating}</Text>

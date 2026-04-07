@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+const DEFAULT_API_PORT = '4000';
+
 export interface ApiTransitStop {
   id: string;
   name: string;
@@ -43,16 +45,25 @@ function resolveApiBase(): string {
   const envBase = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (envBase) return envBase.replace(/\/$/, '');
 
+  const expoHostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as typeof Constants & { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } }).manifest2?.extra?.expoGo?.debuggerHost;
+
+  if (expoHostUri) {
+    const host = expoHostUri.split(':')[0]?.trim();
+    if (host) return `http://${host}:${DEFAULT_API_PORT}`;
+  }
+
   const linkingUri = Constants.linkingUri;
   if (linkingUri) {
     try {
       const normalized = linkingUri.replace(/^exp/, 'http');
       const { hostname } = new URL(normalized);
-      if (hostname) return `http://${hostname}:4000`;
+      if (hostname) return `http://${hostname}:${DEFAULT_API_PORT}`;
     } catch {}
   }
 
-  return 'http://localhost:4000';
+  return `http://localhost:${DEFAULT_API_PORT}`;
 }
 
 export const API_BASE = resolveApiBase();
