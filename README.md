@@ -18,7 +18,7 @@ All-in-one city super-app for Timișoara, Romania -- serving both locals and tou
 | Mobile | React Native, Expo, NativeWind |
 | Backend | NestJS, Prisma, PostgreSQL |
 | Maps | OpenStreetMap + Leaflet |
-| Cache | Redis |
+| Cache | In-memory TTL cache today, Redis optional later |
 
 ## Project Structure
 
@@ -61,6 +61,8 @@ Both clients are now wired for the compose-managed STPT API on `http://localhost
 
 - `apps/web/.env.example` configures `NEXT_PUBLIC_API_URL`
 - `apps/mobile/.env.example` configures `EXPO_PUBLIC_API_URL`
+
+For the recommended Railway-only production deployment for the mobile app, API, and database, see [docs/MOBILE_DEPLOYMENT.md](docs/MOBILE_DEPLOYMENT.md).
 
 Example setup:
 

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { BigIntSerializerInterceptor } from './common/bigint-serializer.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,6 +11,8 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
     credentials: true,
   });
+
+  app.useGlobalInterceptors(new BigIntSerializerInterceptor());
 
   app.useGlobalPipes(
     new ValidationPipe({
