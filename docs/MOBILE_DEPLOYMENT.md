@@ -9,6 +9,14 @@ This is the recommended first production setup for the mobile app only:
 
 This setup keeps operations light and gives you the simplest managed deployment path.
 
+Important security note:
+
+- You cannot make a public mobile API truly callable only by your mobile app.
+- Any endpoint the shipped app can call is still a public internet endpoint.
+- The correct mitigation is to expose only the endpoints the app needs and require auth for anything sensitive.
+- For this transit-only deployment, the API should run with only transit and health routes mounted.
+- In transit-only mode, non-`GET` requests are also rejected globally as a second safety layer.
+
 ## Recommended Architecture
 
 - Mobile clients call `https://api.your-domain.ro`
@@ -69,6 +77,8 @@ DIRECT_URL=${{Postgres.DATABASE_URL}}
 PORT=4000
 NODE_ENV=production
 CORS_ORIGIN=https://your-domain.ro
+TRANSIT_ONLY_API=true
+ENABLE_SWAGGER=false
 ```
 
 ## 3. Deploy the API to Railway
@@ -90,6 +100,8 @@ Set these Railway variables:
 - `PORT=4000`
 - `NODE_ENV=production`
 - `CORS_ORIGIN=https://your-domain.ro`
+- `TRANSIT_ONLY_API=true`
+- `ENABLE_SWAGGER=false`
 
 Notes:
 
@@ -97,6 +109,9 @@ Notes:
 - The API container already runs Prisma migrations on startup through [apps/api/Dockerfile](../apps/api/Dockerfile).
 - The health endpoint is available at [apps/api/src/health/health.controller.ts](../apps/api/src/health/health.controller.ts).
 - If you rename the database service, update the `${{Postgres.DATABASE_URL}}` reference to match the actual Railway service name.
+- `TRANSIT_ONLY_API=true` removes the write-focused modules from the mounted API in production.
+- In production, transit-only mode is the default unless `TRANSIT_ONLY_API=false` is set explicitly.
+- `ENABLE_SWAGGER=false` avoids publishing the API docs in production.
 
 After deployment, verify:
 

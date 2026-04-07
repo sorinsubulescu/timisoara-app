@@ -9,17 +9,22 @@ import { UsersModule } from './users/users.module';
 import { HealthModule } from './health/health.module';
 import { WeatherModule } from './weather/weather.module';
 
+const isTransitOnlyApi = process.env.TRANSIT_ONLY_API === 'true'
+  || (process.env.NODE_ENV === 'production' && process.env.TRANSIT_ONLY_API !== 'false');
+
+const transitOnlyImports = [PrismaModule, ExternalModule, TransitModule, HealthModule];
+const defaultImports = [
+  ...transitOnlyImports,
+  PoisModule,
+  EventsModule,
+  RestaurantsModule,
+  UsersModule,
+  WeatherModule,
+];
+
+const imports = isTransitOnlyApi ? transitOnlyImports : defaultImports;
+
 @Module({
-  imports: [
-    PrismaModule,
-    ExternalModule,
-    PoisModule,
-    EventsModule,
-    TransitModule,
-    RestaurantsModule,
-    UsersModule,
-    HealthModule,
-    WeatherModule,
-  ],
+  imports,
 })
 export class AppModule {}

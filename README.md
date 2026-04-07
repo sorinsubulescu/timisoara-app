@@ -80,6 +80,9 @@ You can ship a transit-only version of the app while the other sections are stil
 
 - **Web:** set `NEXT_PUBLIC_STANDALONE_TRANSIT=true`
 - **Mobile:** set `EXPO_PUBLIC_STANDALONE_TRANSIT=true`
+- **API:** set `TRANSIT_ONLY_API=true` to expose only transit and health endpoints
+
+For production, the API now defaults to transit-only mode unless you explicitly set `TRANSIT_ONLY_API=false`.
 
 When enabled:
 
@@ -89,6 +92,8 @@ When enabled:
 - direct mobile navigation to disabled screens redirects back to `transit`
 
 For Docker builds, the web app reads `NEXT_PUBLIC_STANDALONE_TRANSIT` during `docker compose up --build`.
+
+For a hardened transit-only backend deployment, disable Swagger in production with `ENABLE_SWAGGER=false`. In transit-only mode, non-`GET` requests are rejected globally as an extra safety layer.
 
 Example:
 

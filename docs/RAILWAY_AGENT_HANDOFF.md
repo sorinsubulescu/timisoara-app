@@ -25,10 +25,12 @@ Repository facts:
 - apps/api/Dockerfile already exists and already runs Prisma migrations on startup
 
 Very important clarification:
-- "Transit-only" is currently a mobile app configuration, not a backend feature flag.
-- The backend does not have a runtime switch that disables non-transit Nest modules.
-- Do not rewrite the backend into a transit-only API unless absolutely necessary.
-- The correct interpretation is: deploy the API and Postgres needed by the mobile app, do not deploy the web app, and assume the mobile client will run with EXPO_PUBLIC_STANDALONE_TRANSIT=true.
+- The mobile app still runs with EXPO_PUBLIC_STANDALONE_TRANSIT=true.
+- The backend now supports TRANSIT_ONLY_API=true for a reduced public surface.
+- Use that backend flag so only transit and health routes are mounted in production.
+- In production, transit-only mode is the default unless TRANSIT_ONLY_API=false is set explicitly.
+- Do not deploy the web app.
+- Do not add Redis.
 
 Create these Railway services in one project:
 1. A PostgreSQL service named Postgres
@@ -51,17 +53,23 @@ Set these environment variables on the api service:
 - PORT=4000
 - NODE_ENV=production
 - CORS_ORIGIN=https://your-domain.ro
+- TRANSIT_ONLY_API=true
+- ENABLE_SWAGGER=false
 
 Notes about env vars:
 - Keep the Postgres service name exactly Postgres so the variable reference works as written.
 - If you rename the database service, update the variable reference accordingly.
 - DIRECT_URL should match DATABASE_URL for this Railway-only deployment.
+- TRANSIT_ONLY_API=true should leave only transit and health routes mounted.
+- Transit-only mode should also reject non-GET requests globally as a second safety layer.
+- ENABLE_SWAGGER=false should keep /api/docs out of production.
 
 Expected deployment outcome:
 - Railway project contains exactly two services for now: Postgres and api
 - api service deploys successfully from apps/api
 - /api/health returns status ok
 - api service has a Railway-generated public domain
+- Public write APIs for POIs, events, restaurants, and users are not mounted in transit-only mode
 
 Validation steps:
 1. Confirm the Postgres service is healthy
@@ -75,7 +83,7 @@ Do not do these things:
 - Do not deploy apps/web
 - Do not add Redis
 - Do not add extra services unless required for Railway deployment itself
-- Do not remove existing API modules just to force backend transit-only mode
+- Do not re-enable non-transit modules for this transit-only deployment
 
 If you need a domain suggestion, use api.<my-domain> later, but for the initial setup Railway's generated domain is enough.
 ```
