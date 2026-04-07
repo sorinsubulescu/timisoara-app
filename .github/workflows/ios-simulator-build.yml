@@ -52,16 +52,33 @@ jobs:
             exit 1
           fi
 
-          app_rn_count="$(grep -o "$GITHUB_WORKSPACE/apps/mobile/node_modules/react-native/" "$map_file" | wc -l | tr -d ' ')"
-          root_rn_count="$(grep -o "$GITHUB_WORKSPACE/node_modules/react-native/" "$map_file" | wc -l | tr -d ' ')"
+          node - "$map_file" <<'NODE'
+          const fs = require('node:fs');
 
-          echo "app_rn_count=$app_rn_count"
-          echo "root_rn_count=$root_rn_count"
+          const mapFile = process.argv[2];
+          const map = JSON.parse(fs.readFileSync(mapFile, 'utf8'));
+          const sources = Array.isArray(map.sources) ? map.sources : [];
 
-          if [[ "$root_rn_count" != "0" ]]; then
-            echo "Unexpected hoisted React Native paths found in the iOS bundle source map"
-            exit 1
-          fi
+          const appRnCount = sources.filter((source) =>
+            source.startsWith('/apps/mobile/node_modules/react-native/'),
+          ).length;
+          const rootRnCount = sources.filter((source) =>
+            source.startsWith('/node_modules/react-native/'),
+          ).length;
+
+          console.log(`app_rn_count=${appRnCount}`);
+          console.log(`root_rn_count=${rootRnCount}`);
+
+          if (appRnCount === 0) {
+            console.error('No app-local React Native paths found in the iOS bundle source map');
+            process.exit(1);
+          }
+
+          if (rootRnCount !== 0) {
+            console.error('Unexpected hoisted React Native paths found in the iOS bundle source map');
+            process.exit(1);
+          }
+          NODE
 
       - name: Generate iOS project
         working-directory: apps/mobile
