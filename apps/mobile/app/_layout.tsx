@@ -1,12 +1,28 @@
 import { Tabs } from 'expo-router';
+import type { ErrorBoundaryProps } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { isTransitStandalone } from '@/constants/features';
 import { I18nProvider, useI18n } from '@/lib/i18n';
 
 const PRIMARY_COLOR = '#ec6c21';
 const GestureRoot = GestureHandlerRootView as any;
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <View style={errorStyles.screen}>
+      <View style={errorStyles.card}>
+        <Text style={errorStyles.title}>App crashed during startup</Text>
+        <Text style={errorStyles.message}>{error.message}</Text>
+        <Pressable onPress={retry} style={errorStyles.button}>
+          <Text style={errorStyles.buttonText}>Retry</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   return (
@@ -107,3 +123,47 @@ function TabsLayout() {
     </>
   );
 }
+
+const errorStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#faf9f7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+    padding: 20,
+    gap: 14,
+    shadowColor: '#000000',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  message: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4b5563',
+  },
+  button: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#ec6c21',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+});
