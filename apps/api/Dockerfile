@@ -2,10 +2,12 @@ FROM node:20-alpine AS base
 RUN apk update && apk add --no-cache openssl ca-certificates && update-ca-certificates
 
 # --- Dependencies stage ---
+# Build context is apps/api; root-level package.json and lock file are one level up
 FROM base AS deps
 WORKDIR /app
 ENV NODE_TLS_REJECT_UNAUTHORIZED=0
-COPY package.json ./
+COPY ../package.json ./
+COPY ../package-lock.json ./
 COPY prisma ./prisma/
 RUN npm install && npx prisma generate
 
@@ -30,7 +32,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
-COPY package.json ./
+COPY ../package.json ./
 
 USER nestjs
 
