@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Bus, Calendar, Compass, UtensilsCrossed, User, Flower2 } from 'lucide-react';
-import { appTagline, appTitle, enabledSections, homeHref } from '@/lib/features';
+import { appTagline, appTitle, enabledSections, homeHref, isTransitStandalone } from '@/lib/features';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -18,6 +18,10 @@ const navItems = [
 export default function Navigation({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const visibleNavItems = navItems.filter((item) => enabledSections.includes(item.key));
+
+  if (isTransitStandalone) {
+    return <>{children}</>;
+  }
 
   const isActive = (href: string) =>
     href === '/' ? pathname === '/' : pathname.startsWith(href);

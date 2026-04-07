@@ -70,7 +70,14 @@ export interface CityEvent {
   updatedAt: string;
 }
 
-export type TransportType = 'tram' | 'bus' | 'trolleybus';
+export type TransportType =
+  | 'tram'
+  | 'bus'
+  | 'trolleybus'
+  | 'express'
+  | 'metropolitan'
+  | 'school'
+  | 'vaporetto';
 
 export interface TransitLine {
   id: string;

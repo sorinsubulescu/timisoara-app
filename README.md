@@ -55,6 +55,23 @@ npm run dev:api
 npm run dev:web
 ```
 
+### App API Configuration
+
+Both clients are now wired for the compose-managed STPT API on `http://localhost:4000`.
+
+- `apps/web/.env.example` configures `NEXT_PUBLIC_API_URL`
+- `apps/mobile/.env.example` configures `EXPO_PUBLIC_API_URL`
+
+Example setup:
+
+```bash
+cp apps/web/.env.example apps/web/.env.local
+cp apps/mobile/.env.example apps/mobile/.env
+docker compose up -d --build api
+```
+
+For a physical phone running Expo, set `EXPO_PUBLIC_API_URL` to your Mac's LAN IP, for example `http://192.168.1.50:4000`.
+
 ### Feature Flags
 
 You can ship a transit-only version of the app while the other sections are still in progress.

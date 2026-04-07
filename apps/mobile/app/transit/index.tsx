@@ -6,6 +6,8 @@ import {
   StyleSheet,
   TextInput,
   Easing,
+  Modal,
+  Animated,
 } from 'react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,23 +34,34 @@ import {
   type TransitStop,
   type TransitVehicle,
 } from '@/lib/transit';
+import { useI18n } from '@/lib/i18n';
 
 const WARM_BACKGROUND = '#faf9f7';
 const PRIMARY = '#ec6c21';
 const WARM_100 = '#f4efe9';
 const WARM_200 = '#ebe1d4';
+const SHEET_HIDDEN_OFFSET = 180;
+const SHEET_CLOSE_OFFSET = 260;
 
-const FILTERS: { value: FilterType; label: string; icon: string }[] = [
-  { value: 'all', label: 'All', icon: 'location-outline' },
-  { value: 'tram', label: 'Trams', icon: 'train-outline' },
-  { value: 'bus', label: 'Buses', icon: 'bus-outline' },
-  { value: 'trolleybus', label: 'Trolley', icon: 'flash-outline' },
+const FILTERS: { value: FilterType; icon: string }[] = [
+  { value: 'all', icon: 'location-outline' },
+  { value: 'tram', icon: 'train-outline' },
+  { value: 'bus', icon: 'bus-outline' },
+  { value: 'trolleybus', icon: 'flash-outline' },
+  { value: 'express', icon: 'bus-outline' },
+  { value: 'metropolitan', icon: 'bus-outline' },
+  { value: 'school', icon: 'bus-outline' },
+  { value: 'vaporetto', icon: 'navigate-outline' },
 ];
 
-const TYPE_LABELS: Record<Exclude<FilterType, 'all'>, string> = {
-  tram: 'TRAM',
-  bus: 'BUS',
-  trolleybus: 'TROLLEYBUS',
+const TYPE_ICONS: Record<Exclude<FilterType, 'all'>, keyof typeof Ionicons.glyphMap> = {
+  tram: 'train-outline',
+  bus: 'bus-outline',
+  trolleybus: 'flash-outline',
+  express: 'bus-outline',
+  metropolitan: 'bus-outline',
+  school: 'bus-outline',
+  vaporetto: 'navigate-outline',
 };
 
 function alphaColor(hex: string, opacity: string) {
@@ -66,15 +79,25 @@ function getCurrentDirection(line: TransitLine, index: number) {
   return line.directions[index] ?? line.directions[0];
 }
 
+function stopRenderKey(stopId: string, index: number) {
+  return `${stopId}-${index}`;
+}
+
+function formatPlural(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  baseKey: string,
+  count: number,
+) {
+  return t(`${baseKey}.${count === 1 ? 'one' : 'other'}`, { count });
+}
+
 function FilterPill({
   item,
   active,
-  count,
   onPress,
 }: {
-  item: (typeof FILTERS)[number];
+  item: { value: FilterType; icon: string; label: string };
   active: boolean;
-  count: number;
   onPress: () => void;
 }) {
   return (
@@ -85,15 +108,10 @@ function FilterPill({
     >
       <Ionicons
         name={item.icon as any}
-        size={14}
+        size={16}
         color={active ? '#111827' : '#9ca3af'}
       />
       <Text style={[styles.filterLabel, active && styles.filterLabelActive]}>{item.label}</Text>
-      <View style={[styles.filterCount, active ? styles.filterCountActive : styles.filterCountInactive]}>
-        <Text style={[styles.filterCountText, active ? styles.filterCountTextActive : styles.filterCountTextInactive]}>
-          {count}
-        </Text>
-      </View>
     </TouchableOpacity>
   );
 }
@@ -102,11 +120,7 @@ function VehicleGlyph({ color }: { color: string }) {
   return (
     <View style={styles.vehicleGlyphShadow} collapsable={false}>
       <Svg width={24} height={34} viewBox="0 0 24 34" fill="none">
-        <Path
-          d="M12 2L16.5 7H7.5L12 2Z"
-          fill="#111827"
-          opacity={0.85}
-        />
+        <Path d="M12 2L16.5 7H7.5L12 2Z" fill="#111827" opacity={0.85} />
         <Rect x="4" y="7" width="16" height="22" rx="6.5" fill="#FFFFFF" stroke="#111827" strokeWidth="1.4" />
         <Rect x="5.2" y="8.2" width="13.6" height="19.6" rx="5.9" stroke="#111827" strokeOpacity="0.12" strokeWidth="0.9" />
         <Rect x="6.5" y="10" width="11" height="9" rx="4.5" fill={color} />
@@ -120,6 +134,7 @@ function VehicleGlyph({ color }: { color: string }) {
 }
 
 function RoutePreview({ color, direction, liveVehicles }: { color: string; direction: TransitDirection; liveVehicles: number }) {
+  const { t } = useI18n();
   const animatedCoordinatesRef = useRef<Map<string, AnimatedRegion>>(new Map());
   const [animatedVehicles, setAnimatedVehicles] = useState<
     Array<{ vehicle: TransitVehicle; coordinate: AnimatedRegion }>
@@ -210,13 +225,13 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
       <View style={styles.previewOverlay}>
         <View style={styles.previewChip}>
           <Ionicons name="navigate-outline" size={12} color="#6b7280" />
-          <Text style={styles.previewChipText}>Route preview</Text>
+          <Text style={styles.previewChipText}>{t('transit.routePreview')}</Text>
         </View>
         {liveVehicles > 0 && (
           <View style={styles.vehicleChip}>
             <View style={styles.liveDot} />
             <Text style={styles.vehicleChipText}>
-              {liveVehicles} vehicle{liveVehicles === 1 ? '' : 's'}
+              {formatPlural(t, 'transit.vehicle', liveVehicles)}
             </Text>
           </View>
         )}
@@ -241,7 +256,7 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
               strokeWidth={4}
               lineCap="round"
               lineJoin="round"
-              geodesic
+              geodesic={false}
             />
           )}
 
@@ -252,7 +267,7 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
 
             return (
               <Marker
-                key={stop.id}
+                key={stopRenderKey(stop.id, index)}
                 coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
                 title={stop.name}
                 anchor={{ x: 0.5, y: 0.5 }}
@@ -301,112 +316,115 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
 }
 
 function StopsList({ color, stops }: { color: string; stops: TransitStop[] }) {
-  const [open, setOpen] = useState(false);
+  const { t } = useI18n();
   const activeStops = stops.filter((stop) => stop.status === 'vehicleHere').length;
+  const approachingStops = stops.filter((stop) => stop.status === 'approaching').length;
 
   return (
     <View style={styles.stopsSection}>
-      <TouchableOpacity
-        onPress={() => setOpen((value) => !value)}
-        activeOpacity={0.9}
-        style={styles.stopsToggle}
-      >
+      <View style={styles.stopsHeader}>
         <Ionicons name="git-network-outline" size={14} color={color} />
-        <Text style={styles.stopsToggleText}>{stops.length} stops</Text>
+        <Text style={styles.stopsHeaderTitle}>{formatPlural(t, 'transit.stopsOnRoute', stops.length)}</Text>
         {activeStops > 0 && (
           <View style={styles.stopsVehiclePill}>
             <View style={styles.liveDotSmall} />
-            <Text style={styles.stopsVehiclePillText}>{activeStops} en route</Text>
+            <Text style={styles.stopsVehiclePillText}>{t('transit.atStopCount', { count: activeStops })}</Text>
           </View>
         )}
-        <Ionicons
-          name={open ? 'chevron-up' : 'chevron-down'}
-          size={16}
-          color="#d1d5db"
-          style={styles.stopsToggleChevron}
-        />
-      </TouchableOpacity>
+        {approachingStops > 0 && (
+          <View style={styles.stopsApproachingPill}>
+            <Text style={styles.stopsApproachingText}>{t('transit.approachingCount', { count: approachingStops })}</Text>
+          </View>
+        )}
+      </View>
 
-      {open && (
-        <View style={[styles.stopsList, { borderLeftColor: alphaColor(color, '30') }]}>
-          {stops.map((stop, index) => {
-            const isTerminal = index === 0 || index === stops.length - 1;
-            const isLive = stop.status === 'vehicleHere';
-            const isApproaching = stop.status === 'approaching';
+      <View style={[styles.stopsList, { borderLeftColor: alphaColor(color, '30') }]}> 
+        {stops.map((stop, index) => {
+          const isTerminal = index === 0 || index === stops.length - 1;
+          const isLive = stop.status === 'vehicleHere';
+          const isApproaching = stop.status === 'approaching';
 
-            return (
+          return (
+            <View
+              key={stopRenderKey(stop.id, index)}
+              style={[
+                styles.stopRow,
+                isLive && styles.stopRowLive,
+                isApproaching && styles.stopRowApproaching,
+              ]}
+            >
               <View
-                key={stop.id}
                 style={[
-                  styles.stopRow,
-                  isLive && styles.stopRowLive,
-                  isApproaching && styles.stopRowApproaching,
+                  styles.stopDot,
+                  isTerminal && { backgroundColor: color, borderColor: '#ffffff', width: 12, height: 12 },
+                  !isTerminal && !isLive && !isApproaching && { backgroundColor: alphaColor(color, 'a0') },
+                  isLive && styles.stopDotLive,
+                  isApproaching && styles.stopDotApproaching,
+                ]}
+              />
+
+              <Text
+                style={[
+                  styles.stopName,
+                  isTerminal && styles.stopNameTerminal,
+                  isLive && styles.stopNameHighlighted,
+                  isApproaching && styles.stopNameApproaching,
                 ]}
               >
-                <View
-                  style={[
-                    styles.stopDot,
-                    isTerminal && { backgroundColor: color, borderColor: '#ffffff', width: 12, height: 12 },
-                    !isTerminal && !isLive && !isApproaching && { backgroundColor: alphaColor(color, 'a0') },
-                    isLive && styles.stopDotLive,
-                    isApproaching && styles.stopDotApproaching,
-                  ]}
-                />
+                {stop.name}
+              </Text>
 
-                <Text
-                  style={[
-                    styles.stopName,
-                    isTerminal && styles.stopNameTerminal,
-                    isLive && styles.stopNameHighlighted,
-                    isApproaching && styles.stopNameApproaching,
-                  ]}
-                >
-                  {stop.name}
-                </Text>
+              {isLive && (
+                <View style={styles.stopBadgeGreen}>
+                  <Text style={styles.stopBadgeGreenText}>{t('transit.atStop')}</Text>
+                </View>
+              )}
 
-                {isLive && (
-                  <View style={styles.stopBadgeGreen}>
-                    <Text style={styles.stopBadgeGreenText}>At stop</Text>
-                  </View>
-                )}
+              {!isLive && isApproaching && (
+                <View style={styles.stopBadgeAmber}>
+                  <Text style={styles.stopBadgeAmberText}>{t('transit.approaching')}</Text>
+                </View>
+              )}
 
-                {!isLive && isApproaching && (
-                  <View style={styles.stopBadgeAmber}>
-                    <Text style={styles.stopBadgeAmberText}>Approaching</Text>
-                  </View>
-                )}
-
-                {!isLive && !isApproaching && stop.etaMinutes !== undefined && (
-                  <View style={[styles.stopEtaBadge, { backgroundColor: alphaColor(color, '12') }]}>
-                    <Text style={[styles.stopEtaText, { color }]}>
-                      {stop.etaMinutes < 1 ? '< 1 min' : `~${stop.etaMinutes} min`}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
-      )}
+              {!isLive && !isApproaching && stop.etaMinutes !== undefined && (
+                <View style={[styles.stopEtaBadge, { backgroundColor: alphaColor(color, '12') }]}> 
+                  <Text style={[styles.stopEtaText, { color }]}> 
+                    {stop.etaMinutes < 1 ? t('transit.etaUnderMinute') : t('transit.etaMinutes', { count: stop.etaMinutes })}
+                  </Text>
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
+
+type DetailView = 'map' | 'stops';
+type SheetMode = 'filters' | 'language' | null;
 
 function LineCard({
   line,
   expanded,
   dirIndex,
+  detailView,
   onToggle,
   onDirectionChange,
+  onDetailViewChange,
 }: {
   line: TransitLine;
   expanded: boolean;
   dirIndex: number;
+  detailView: DetailView;
   onToggle: () => void;
   onDirectionChange: (index: number) => void;
+  onDetailViewChange: (view: DetailView) => void;
 }) {
+  const { t } = useI18n();
   const currentDirection = getCurrentDirection(line, dirIndex);
   const endpoints = getDirectionEndpoints(currentDirection);
+  const currentDirectionLiveVehicles = currentDirection.vehicles.length;
 
   return (
     <View style={[styles.card, expanded && styles.cardExpanded]}>
@@ -426,30 +444,37 @@ function LineCard({
 
           <View style={styles.routeMetaRow}>
             <Ionicons
-              name={line.type === 'tram' ? 'train-outline' : line.type === 'bus' ? 'bus-outline' : 'flash-outline'}
+              name={TYPE_ICONS[line.type]}
               size={12}
               color="#9ca3af"
             />
-            <Text style={styles.routeMetaLabel}>{TYPE_LABELS[line.type]}</Text>
+            <Text style={styles.routeMetaLabel}>{t(`transit.type.${line.type}`)}</Text>
             <Text style={styles.routeMetaSeparator}>·</Text>
-            <Text style={styles.routeMetaValue}>{currentDirection.stops.length} stops</Text>
+            <Text style={styles.routeMetaValue}>{formatPlural(t, 'transit.stops', currentDirection.stops.length)}</Text>
             {line.liveVehicles > 0 && (
               <>
                 <Text style={styles.routeMetaSeparator}>·</Text>
                 <View style={styles.liveMetaPill}>
                   <View style={styles.liveDotSmall} />
-                  <Text style={styles.liveMetaText}>{line.liveVehicles} live</Text>
+                  <Text style={styles.liveMetaText}>{t('transit.liveCount', { count: line.liveVehicles })}</Text>
                 </View>
               </>
             )}
           </View>
+
+          {!expanded && (
+            <View style={styles.cardHintRow}>
+              <Ionicons name="hand-left-outline" size={12} color="#9ca3af" />
+              <Text style={styles.cardHintText}>{t('transit.tapForDetails')}</Text>
+            </View>
+          )}
         </View>
 
         <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color="#d1d5db" />
       </TouchableOpacity>
 
       {expanded && (
-        <View style={styles.expandedSection}>
+        <View style={[styles.expandedSection, detailView === 'map' && styles.expandedSectionMap]}>
           {line.directions.length > 1 && (
             <View style={styles.directionSegmentRow}>
               {line.directions.map((direction, index) => {
@@ -477,8 +502,61 @@ function LineCard({
             </View>
           )}
 
-          <RoutePreview color={line.color} direction={currentDirection} liveVehicles={line.liveVehicles} />
-          <StopsList color={line.color} stops={currentDirection.stops} />
+          <View style={styles.detailTabsRow}>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => onDetailViewChange('map')}
+              style={[
+                styles.detailTab,
+                detailView === 'map' && styles.detailTabActive,
+                detailView === 'map' && { borderColor: alphaColor(line.color, '50') },
+              ]}
+            >
+              <Ionicons
+                name="map-outline"
+                size={14}
+                color={detailView === 'map' ? line.color : '#9ca3af'}
+              />
+              <Text
+                style={[
+                  styles.detailTabText,
+                  detailView === 'map' && { color: line.color },
+                ]}
+              >
+                {t('common.map')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => onDetailViewChange('stops')}
+              style={[
+                styles.detailTab,
+                detailView === 'stops' && styles.detailTabActive,
+                detailView === 'stops' && { borderColor: alphaColor(line.color, '50') },
+              ]}
+            >
+              <Ionicons
+                name="list-outline"
+                size={14}
+                color={detailView === 'stops' ? line.color : '#9ca3af'}
+              />
+              <Text
+                style={[
+                  styles.detailTabText,
+                  detailView === 'stops' && { color: line.color },
+                ]}
+              >
+                {t('common.stops')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {detailView === 'map' ? (
+            <RoutePreview color={line.color} direction={currentDirection} liveVehicles={currentDirectionLiveVehicles} />
+          ) : (
+            <StopsList color={line.color} stops={currentDirection.stops} />
+          )}
         </View>
       )}
     </View>
@@ -498,16 +576,26 @@ function SkeletonCard() {
 }
 
 export default function TransitScreen() {
+  const { language, languages, setLanguage, t } = useI18n();
   const insets = useSafeAreaInsets();
+  const sheetTranslateY = useRef(new Animated.Value(280)).current;
+  const isSheetClosingRef = useRef(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
+  const [activeSheet, setActiveSheet] = useState<SheetMode>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeDirections, setActiveDirections] = useState<Record<string, number>>({});
+  const [activeDetailViews, setActiveDetailViews] = useState<Record<string, DetailView>>({});
   const [allLines, setAllLines] = useState<TransitLine[]>([]);
   const [stopCount, setStopCount] = useState(0);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const localizedFilters = useMemo(
+    () => FILTERS.map((item) => ({ ...item, label: t(`transit.filter.${item.value}`) })),
+    [t],
+  );
 
   const loadTransitData = useCallback(async (isInitialLoad: boolean) => {
     if (isInitialLoad) {
@@ -527,8 +615,8 @@ export default function TransitScreen() {
       setAllLines(buildDisplayLines(lines, vehicles));
       setStopCount(stops.length);
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Failed to load transit data.';
-      setError(`${message} Check that the API is reachable at ${API_BASE}.`);
+      const message = loadError instanceof Error ? loadError.message : t('transit.failedLoad');
+      setError(`${message} ${t('transit.checkApi', { api: API_BASE })}`);
     } finally {
       if (isInitialLoad) {
         setInitialLoading(false);
@@ -536,7 +624,7 @@ export default function TransitScreen() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadTransitData(true);
@@ -547,16 +635,6 @@ export default function TransitScreen() {
 
     return () => clearInterval(interval);
   }, [loadTransitData]);
-
-  const typeCounts = useMemo(
-    () => ({
-      all: allLines.length,
-      tram: allLines.filter((line) => line.type === 'tram').length,
-      bus: allLines.filter((line) => line.type === 'bus').length,
-      trolleybus: allLines.filter((line) => line.type === 'trolleybus').length,
-    }),
-    [allLines],
-  );
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -580,6 +658,100 @@ export default function TransitScreen() {
     });
   }, [search, filter, allLines, activeDirections]);
 
+  const hasActiveSearch = search.trim().length > 0;
+  const hasActiveFilters = hasActiveSearch || filter !== 'all';
+
+  const summaryLabel = useMemo(() => {
+    if (initialLoading) {
+      return t('transit.loadingRoutes');
+    }
+
+    if (error) {
+      return t('transit.liveUnavailable');
+    }
+
+    if (filtered.length === allLines.length && !hasActiveFilters) {
+      return t('transit.showingAllRoutes', { count: allLines.length });
+    }
+
+    return t('transit.showingFilteredRoutes', { visible: filtered.length, total: allLines.length });
+  }, [allLines.length, error, filtered.length, hasActiveFilters, initialLoading, t]);
+
+  const resetFilters = useCallback(() => {
+    setSearch('');
+    setFilter('all');
+  }, []);
+
+  const animateSheetIn = useCallback(() => {
+    sheetTranslateY.setValue(SHEET_HIDDEN_OFFSET);
+    Animated.spring(sheetTranslateY, {
+      toValue: 0,
+      damping: 18,
+      mass: 0.9,
+      stiffness: 220,
+      overshootClamping: false,
+      useNativeDriver: true,
+    }).start();
+  }, [sheetTranslateY]);
+
+  const animateSheetOut = useCallback((onComplete?: () => void) => {
+    Animated.timing(sheetTranslateY, {
+      toValue: SHEET_CLOSE_OFFSET,
+      duration: 150,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      onComplete?.();
+    });
+  }, [sheetTranslateY]);
+
+  const openSheet = useCallback((mode: Exclude<SheetMode, null>) => {
+    isSheetClosingRef.current = false;
+    sheetTranslateY.stopAnimation();
+    sheetTranslateY.setValue(SHEET_HIDDEN_OFFSET);
+    setActiveSheet(mode);
+    setSheetVisible(true);
+  }, [sheetTranslateY]);
+
+  const selectFilter = useCallback((value: FilterType) => {
+    setFilter(value);
+    animateSheetOut(() => {
+      isSheetClosingRef.current = false;
+      setSheetVisible(false);
+      setActiveSheet(null);
+    });
+  }, [animateSheetOut]);
+
+  const closeSheet = useCallback(() => {
+    if (!sheetVisible || isSheetClosingRef.current) {
+      return;
+    }
+
+    isSheetClosingRef.current = true;
+    animateSheetOut(() => {
+      isSheetClosingRef.current = false;
+      setSheetVisible(false);
+      setActiveSheet(null);
+    });
+  }, [animateSheetOut, sheetVisible]);
+
+  useEffect(() => {
+    if (!sheetVisible || !activeSheet) {
+      return;
+    }
+
+    animateSheetIn();
+  }, [activeSheet, animateSheetIn, sheetVisible]);
+
+  const backdropOpacity = sheetTranslateY.interpolate({
+    inputRange: [0, SHEET_CLOSE_OFFSET],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const activeLanguage = languages.find((item) => item.code === language);
+  const activeLanguageLabel = activeLanguage ? `${activeLanguage.flag} ${activeLanguage.label}` : language;
+
   return (
     <View style={styles.container}>
       <View
@@ -594,16 +766,20 @@ export default function TransitScreen() {
           </View>
 
           <View style={styles.headerTextWrap}>
-            <Text style={styles.pageTitle}>Public Transport</Text>
+            <Text style={styles.pageTitle}>{t('transit.publicTransport')}</Text>
             <Text style={styles.pageSubtitle}>
-              {allLines.length} routes · {stopCount} stops · Timișoara
+              {t('transit.subtitle', { routes: allLines.length, stops: stopCount })}
             </Text>
           </View>
 
-          <View style={styles.liveGpsPill}>
-            <Ionicons name="radio-outline" size={12} color="#16a34a" />
-            <Text style={styles.liveGpsText}>{refreshing ? 'Refreshing' : 'Live GPS'}</Text>
-          </View>
+          <TouchableOpacity
+            onPress={() => openSheet('language')}
+            activeOpacity={0.9}
+            style={styles.headerLanguagePill}
+          >
+            <Text style={styles.headerLanguageText} numberOfLines={1}>{activeLanguageLabel}</Text>
+            <Ionicons name="chevron-down" size={14} color="#9ca3af" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.searchWrap}>
@@ -611,22 +787,20 @@ export default function TransitScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search lines, routes or stops..."
+            placeholder={t('transit.searchPlaceholder')}
             placeholderTextColor="#9ca3af"
             style={styles.searchInput}
           />
-        </View>
 
-        <View style={styles.filterRow}>
-          {FILTERS.map((item) => (
-            <FilterPill
-              key={item.value}
-              item={item}
-              active={filter === item.value}
-              count={typeCounts[item.value]}
-              onPress={() => setFilter(item.value)}
-            />
-          ))}
+          {hasActiveSearch && (
+            <TouchableOpacity
+              onPress={() => setSearch('')}
+              activeOpacity={0.85}
+              style={styles.searchClearButton}
+            >
+              <Ionicons name="close-circle" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -647,10 +821,10 @@ export default function TransitScreen() {
             <View style={styles.emptyIconWrap}>
               <Ionicons name="alert-circle-outline" size={28} color="#cbd5e1" />
             </View>
-            <Text style={styles.emptyTitle}>Transit data is unavailable</Text>
+            <Text style={styles.emptyTitle}>{t('transit.dataUnavailable')}</Text>
             <Text style={styles.emptyDescription}>{error}</Text>
             <TouchableOpacity onPress={() => loadTransitData(true)}>
-              <Text style={styles.emptyAction}>Retry</Text>
+              <Text style={styles.emptyAction}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : filtered.length === 0 ? (
@@ -658,28 +832,166 @@ export default function TransitScreen() {
             <View style={styles.emptyIconWrap}>
               <Ionicons name="bus-outline" size={28} color="#cbd5e1" />
             </View>
-            <Text style={styles.emptyTitle}>No routes match your search</Text>
-            <TouchableOpacity onPress={() => { setSearch(''); setFilter('all'); }}>
-              <Text style={styles.emptyAction}>Clear filters</Text>
+            <Text style={styles.emptyTitle}>{t('transit.noRoutes')}</Text>
+            <TouchableOpacity onPress={resetFilters}>
+              <Text style={styles.emptyAction}>{t('transit.clearFilters')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.cardList}>
+            <View style={styles.summaryBanner}>
+              <View style={styles.summaryBannerMain}>
+                <View style={styles.summaryPill}>
+                  <Ionicons name="list-outline" size={12} color="#6b7280" />
+                  <Text style={styles.summaryText}>{summaryLabel}</Text>
+                </View>
+                <Text style={styles.summaryHintText}>{t('transit.summaryHint')}</Text>
+              </View>
+            </View>
+
             {filtered.map((line) => (
               <LineCard
                 key={line.id}
                 line={line}
                 expanded={expandedId === line.id}
                 dirIndex={activeDirections[line.id] ?? 0}
+                detailView={activeDetailViews[line.id] ?? 'map'}
                 onToggle={() => setExpandedId((current) => (current === line.id ? null : line.id))}
                 onDirectionChange={(index) =>
                   setActiveDirections((current) => ({ ...current, [line.id]: index }))
+                }
+                onDetailViewChange={(view) =>
+                  setActiveDetailViews((current) => ({ ...current, [line.id]: view }))
                 }
               />
             ))}
           </View>
         )}
       </ScrollView>
+
+      <View style={[styles.bottomActionBar, { paddingBottom: Math.max(10, insets.bottom + 6) }]}>
+        <TouchableOpacity
+          activeOpacity={0.92}
+          onPress={() => openSheet('filters')}
+          style={styles.bottomActionPrimary}
+        >
+          <View style={styles.bottomActionPrimaryIcon}>
+            <Ionicons name="options-outline" size={16} color="#ffffff" />
+          </View>
+          <View style={styles.bottomActionPrimaryTextWrap}>
+            <Text style={styles.bottomActionPrimaryTitle}>{t('transit.transportMode')}</Text>
+            <Text style={styles.bottomActionPrimarySubtitle}>
+              {filter === 'all'
+                ? t('transit.showingAllRoutes', { count: allLines.length })
+                : localizedFilters.find((item) => item.value === filter)?.label ?? t('transit.filtered')}
+            </Text>
+          </View>
+          <Ionicons name="chevron-up" size={18} color="#6b7280" />
+        </TouchableOpacity>
+
+        {hasActiveFilters && (
+          <TouchableOpacity onPress={resetFilters} activeOpacity={0.88} style={styles.bottomActionSecondary}>
+            <Ionicons name="refresh-outline" size={14} color={PRIMARY} />
+            <Text style={styles.bottomActionSecondaryText}>{t('transit.clearFilters')}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <Modal
+        visible={sheetVisible}
+        animationType="none"
+        transparent
+        onRequestClose={closeSheet}
+      >
+        <View style={styles.modalBackdrop}>
+          <Animated.View pointerEvents="none" style={[styles.modalScrim, { opacity: backdropOpacity }]} />
+          <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={closeSheet} />
+
+          {activeSheet === 'filters' ? (
+            <Animated.View
+              style={[
+                styles.filterSheet,
+                { paddingBottom: Math.max(16, insets.bottom + 4), transform: [{ translateY: sheetTranslateY }] },
+              ]}
+            >
+              <View style={styles.sheetTopArea}>
+                <View style={styles.filterSheetHandle} />
+              </View>
+              <View style={styles.filterSheetHeader}>
+                <View style={styles.sheetHeaderCopy}>
+                  <Text style={styles.filterSheetTitle}>{t('transit.chooseMode')}</Text>
+                  <Text style={styles.filterSheetSubtitle}>{t('transit.modeSheetHint')}</Text>
+                </View>
+                <View style={styles.filterSheetActions}>
+                  {hasActiveFilters && (
+                    <TouchableOpacity onPress={resetFilters} activeOpacity={0.88} style={styles.filterSheetReset}>
+                      <Ionicons name="refresh-outline" size={13} color={PRIMARY} />
+                      <Text style={styles.filterSheetResetText}>{t('transit.clearFilters')}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={closeSheet} activeOpacity={0.88} style={styles.filterSheetClose}>
+                    <Ionicons name="close" size={16} color="#6b7280" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.filterRow}>
+                {localizedFilters.map((item) => (
+                  <FilterPill
+                    key={item.value}
+                    item={item}
+                    active={filter === item.value}
+                    onPress={() => selectFilter(item.value)}
+                  />
+                ))}
+              </View>
+            </Animated.View>
+          ) : (
+            <Animated.View
+              style={[
+                styles.filterSheet,
+                styles.languageSheet,
+                { paddingBottom: Math.max(16, insets.bottom + 4), transform: [{ translateY: sheetTranslateY }] },
+              ]}
+            >
+              <View style={styles.sheetTopArea}>
+                <View style={styles.filterSheetHandle} />
+              </View>
+              <View style={styles.filterSheetHeader}>
+                <View style={[styles.sheetHeaderCopy, styles.languageSheetHeader]}>
+                  <Text style={styles.filterSheetTitle}>{t('transit.chooseLanguage')}</Text>
+                  <Text style={styles.filterSheetSubtitle}>{t('transit.languageSheetHint')}</Text>
+                </View>
+                <TouchableOpacity onPress={closeSheet} activeOpacity={0.88} style={styles.filterSheetClose}>
+                  <Ionicons name="close" size={16} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.languageChooserRow}>
+                {languages.map((item) => {
+                  const active = item.code === language;
+
+                  return (
+                    <TouchableOpacity
+                      key={item.code}
+                      activeOpacity={0.88}
+                      onPress={() => {
+                        setLanguage(item.code);
+                        closeSheet();
+                      }}
+                      style={[styles.languageChooserChip, active && styles.languageChooserChipActive]}
+                    >
+                      <Text style={[styles.languageChooserText, active && styles.languageChooserTextActive]}>
+                        {`${item.flag} ${item.label}`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </Animated.View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -737,19 +1049,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
   },
-  liveGpsPill: {
+  headerLanguagePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#f0fdf4',
+    gap: 6,
+    backgroundColor: '#fff7ed',
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 999,
+    maxWidth: 128,
   },
-  liveGpsText: {
+  headerLanguageText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#16a34a',
+    color: PRIMARY,
+    flexShrink: 1,
   },
   searchWrap: {
     flexDirection: 'row',
@@ -757,7 +1071,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.82)',
     borderRadius: 16,
     paddingHorizontal: 14,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.5)',
     shadowColor: '#000',
@@ -775,22 +1088,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#111827',
   },
+  searchClearButton: {
+    paddingLeft: 8,
+    paddingVertical: 4,
+  },
   filterRow: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(244,239,233,0.8)',
-    borderRadius: 16,
+    flexWrap: 'wrap',
+    backgroundColor: 'rgba(244,239,233,0.72)',
+    borderRadius: 18,
     padding: 4,
-    marginBottom: 20,
     gap: 6,
   },
   filterPill: {
-    flex: 1,
-    flexDirection: 'row',
+    width: '23.5%',
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
-    borderRadius: 12,
-    paddingVertical: 10,
+    gap: 4,
+    borderRadius: 14,
+    paddingVertical: 8,
     paddingHorizontal: 6,
   },
   filterPillActive: {
@@ -801,36 +1118,52 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   filterLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#9ca3af',
+    textAlign: 'center',
   },
   filterLabelActive: {
     color: '#111827',
   },
-  filterCount: {
-    borderRadius: 999,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  filterCountActive: {
-    backgroundColor: '#fff7ed',
-  },
-  filterCountInactive: {
-    backgroundColor: WARM_200,
-  },
-  filterCountText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  filterCountTextActive: {
-    color: PRIMARY,
-  },
-  filterCountTextInactive: {
-    color: '#9ca3af',
-  },
   cardList: {
     gap: 12,
+  },
+  summaryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.65)',
+  },
+  summaryBannerMain: {
+    flex: 1,
+  },
+  summaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: WARM_100,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    flexShrink: 1,
+  },
+  summaryText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
+  summaryHintText: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#6b7280',
   },
   card: {
     backgroundColor: '#ffffff',
@@ -923,6 +1256,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
   },
+  cardHintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  cardHintText: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
   liveDotSmall: {
     width: 6,
     height: 6,
@@ -933,6 +1276,36 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
     paddingBottom: 12,
+  },
+  expandedSectionMap: {
+    paddingBottom: 0,
+  },
+  detailTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  detailTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#ffffff',
+  },
+  detailTabActive: {
+    backgroundColor: '#fffaf5',
+  },
+  detailTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
   },
   directionSegmentRow: {
     flexDirection: 'row',
@@ -964,6 +1337,9 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     marginHorizontal: 0,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    overflow: 'hidden',
   },
   previewOverlay: {
     position: 'absolute',
@@ -1011,7 +1387,8 @@ const styles = StyleSheet.create({
   previewCanvas: {
     height: 220,
     backgroundColor: '#ede7df',
-    borderRadius: 0,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -1058,7 +1435,32 @@ const styles = StyleSheet.create({
   },
   stopsSection: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 4,
+    paddingBottom: 8,
+  },
+  stopsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 10,
+  },
+  stopsHeaderTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  stopsApproachingPill: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  stopsApproachingText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#d97706',
   },
   stopsToggle: {
     flexDirection: 'row',
@@ -1245,6 +1647,176 @@ const styles = StyleSheet.create({
   emptyAction: {
     fontSize: 12,
     fontWeight: '700',
+    color: PRIMARY,
+  },
+  bottomActionBar: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bottomActionPrimary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.7)',
+    shadowColor: '#111827',
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  bottomActionPrimaryIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomActionPrimaryTextWrap: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  bottomActionPrimaryTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  bottomActionPrimarySubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+  bottomActionSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#fff7ed',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  bottomActionSecondaryText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(17,24,39,0.24)',
+  },
+  filterSheet: {
+    backgroundColor: '#fffaf6',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  sheetTopArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 24,
+    marginBottom: 8,
+  },
+  filterSheetHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#d1d5db',
+    alignSelf: 'center',
+    marginBottom: 0,
+  },
+  filterSheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 14,
+  },
+  sheetHeaderCopy: {
+    flex: 1,
+  },
+  filterSheetActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterSheetTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  filterSheetSubtitle: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  filterSheetReset: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff7ed',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  filterSheetResetText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: PRIMARY,
+  },
+  filterSheetClose: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  languageSheet: {
+    paddingTop: 12,
+  },
+  languageSheetHeader: {
+    flex: 1,
+  },
+  languageChooserRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  languageChooserChip: {
+    borderRadius: 999,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  languageChooserChipActive: {
+    backgroundColor: '#fff7ed',
+    borderColor: alphaColor(PRIMARY, '55'),
+  },
+  languageChooserText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  languageChooserTextActive: {
     color: PRIMARY,
   },
 });

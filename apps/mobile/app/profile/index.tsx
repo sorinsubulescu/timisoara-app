@@ -3,10 +3,14 @@ import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 're
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { isTransitStandalone } from '@/constants/features';
+import { useI18n } from '@/lib/i18n';
 
 const PRIMARY = '#ec6c21';
 
 export default function ProfileScreen() {
+  const { language, languages, setLanguage, t } = useI18n();
+  const currentLanguage = languages.find((item) => item.code === language);
+
   if (isTransitStandalone) {
     return <Redirect href="/transit" />;
   }
@@ -21,14 +25,14 @@ export default function ProfileScreen() {
         <View style={styles.avatar}>
           <Ionicons name="person" size={40} color="#fff" />
         </View>
-        <Text style={styles.name}>Guest User</Text>
+        <Text style={styles.name}>{t('common.guestUser')}</Text>
         <View style={styles.modeToggle}>
           <TouchableOpacity
             style={[styles.modeBtn, mode === 'tourist' && styles.modeBtnActive]}
             onPress={() => setMode('tourist')}
           >
             <Text style={[styles.modeBtnText, mode === 'tourist' && styles.modeBtnTextActive]}>
-              Tourist
+              {t('common.tourist')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -36,58 +40,73 @@ export default function ProfileScreen() {
             onPress={() => setMode('local')}
           >
             <Text style={[styles.modeBtnText, mode === 'local' && styles.modeBtnTextActive]}>
-              Local
+              {t('common.local')}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Saved</Text>
+        <Text style={styles.sectionTitle}>{t('common.saved')}</Text>
         <TouchableOpacity style={styles.row}>
           <Ionicons name="heart-outline" size={20} color="#6b7280" />
-          <Text style={styles.rowText}>Saved Places</Text>
+          <Text style={styles.rowText}>{t('common.savedPlaces')}</Text>
           <Text style={styles.rowCount}>0</Text>
           <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.row}>
           <Ionicons name="calendar-outline" size={20} color="#6b7280" />
-          <Text style={styles.rowText}>Saved Events</Text>
+          <Text style={styles.rowText}>{t('common.savedEvents')}</Text>
           <Text style={styles.rowCount}>0</Text>
           <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
         </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Settings</Text>
+        <Text style={styles.sectionTitle}>{t('common.settings')}</Text>
         <View style={styles.row}>
           <Ionicons name="moon-outline" size={20} color="#6b7280" />
-          <Text style={styles.rowText}>Dark Mode</Text>
+          <Text style={styles.rowText}>{t('common.darkMode')}</Text>
           <Switch value={darkMode} onValueChange={setDarkMode} trackColor={{ true: PRIMARY }} />
         </View>
         <View style={styles.row}>
           <Ionicons name="notifications-outline" size={20} color="#6b7280" />
-          <Text style={styles.rowText}>Notifications</Text>
+          <Text style={styles.rowText}>{t('common.notifications')}</Text>
           <Switch value={notifications} onValueChange={setNotifications} trackColor={{ true: PRIMARY }} />
         </View>
-        <TouchableOpacity style={styles.row}>
-          <Ionicons name="globe-outline" size={20} color="#6b7280" />
-          <Text style={styles.rowText}>Language</Text>
-          <Text style={styles.rowValue}>English</Text>
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-        </TouchableOpacity>
+        <View style={styles.row}>
+          <Text style={styles.rowText}>{t('common.language')}</Text>
+          <Text style={styles.rowValue}>{currentLanguage ? `${currentLanguage.flag} ${currentLanguage.label}` : language}</Text>
+        </View>
+        <View style={styles.languageList}>
+          {languages.map((item) => {
+            const active = item.code === language;
+
+            return (
+              <TouchableOpacity
+                key={item.code}
+                onPress={() => setLanguage(item.code)}
+                style={[styles.languageChip, active && styles.languageChipActive]}
+              >
+                <Text style={[styles.languageChipText, active && styles.languageChipTextActive]}>
+                  {`${item.flag} ${item.label}`}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.signInBtn}>
-          <Text style={styles.signInText}>Sign In</Text>
+          <Text style={styles.signInText}>{t('common.signIn')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.createBtn}>
-          <Text style={styles.createText}>Create Account</Text>
+          <Text style={styles.createText}>{t('common.createAccount')}</Text>
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.version}>Timișoara App v0.1.0</Text>
+      <Text style={styles.version}>{t('common.version', { version: '0.1.0' })}</Text>
     </ScrollView>
   );
 }
@@ -108,6 +127,11 @@ const styles = StyleSheet.create({
   rowText: { flex: 1, fontSize: 15, color: '#1f2937' },
   rowCount: { fontSize: 14, color: '#9ca3af', marginRight: 4 },
   rowValue: { fontSize: 14, color: '#9ca3af', marginRight: 4 },
+  languageList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingBottom: 16, paddingTop: 2 },
+  languageChip: { borderRadius: 999, backgroundColor: '#f3f4f6', paddingHorizontal: 12, paddingVertical: 8 },
+  languageChipActive: { backgroundColor: PRIMARY },
+  languageChipText: { fontSize: 13, fontWeight: '600', color: '#6b7280' },
+  languageChipTextActive: { color: '#fff' },
   signInBtn: { margin: 16, marginBottom: 10, backgroundColor: PRIMARY, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   signInText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   createBtn: { marginHorizontal: 16, marginBottom: 16, borderWidth: 2, borderColor: PRIMARY, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },

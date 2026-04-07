@@ -30,31 +30,67 @@ export interface TransitStopDto {
 }
 
 const CACHE_TTL = 300; // 5 min — DB is the durable store
-const TM_BBOX = '45.70,21.17,45.80,21.30';
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const STPT_BASE_URL = 'https://live.stpt.ro';
+const STPT_SOURCE = 'stpt-live';
 
-const ROUTE_TYPE_MAP: Record<string, string> = {
-  tram: 'tram',
-  bus: 'bus',
-  trolleybus: 'trolleybus',
-  light_rail: 'tram',
+const STPT_LABEL_TYPE_MAP: Record<string, string> = {
+  tramvai: 'tram',
+  troleibuz: 'trolleybus',
+  autobuz: 'bus',
+  'autobuz urban': 'bus',
+  expres: 'express',
+  metropolitan: 'metropolitan',
+  'școlar': 'school',
+  scolar: 'school',
+  vaporetto: 'vaporetto',
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  tram: '#E30613',
-  bus: '#059669',
-  trolleybus: '#DC2626',
+  tram: '#E3A900',
+  trolleybus: '#6F2095',
+  bus: '#4D897F',
+  express: '#F58134',
+  school: '#E31E25',
+  metropolitan: '#0148A2',
+  vaporetto: '#2DB8C5',
 };
 
-interface OsmTransitLine {
-  osmId: number;
+interface ExternalTransitLine {
+  osmId: bigint;
   lineNumber: string;
   type: string;
   name: string;
   color: string;
-  stops: Array<{ osmId: number; name: string; latitude: number; longitude: number; stopOrder: number }>;
+  stops: Array<{ osmId: bigint; name: string; latitude: number; longitude: number; stopOrder: number }>;
   geometry: [number, number][];
 }
+
+interface StptLineGroup {
+  label: string;
+  type: string;
+  lineNumbers: string[];
+  color: string;
+}
+
+interface StptDirectionPayload {
+  ids?: string[];
+  stations?: string[];
+  coords?: Array<[number, number]>;
+}
+
+interface GeoJsonFeatureCollection {
+  type?: string;
+  features?: GeoJsonFeature[];
+}
+
+interface GeoJsonFeature {
+  geometry?: GeoJsonGeometry | null;
+}
+
+type GeoJsonGeometry =
+  | { type: 'LineString'; coordinates?: Array<[number, number]> }
+  | { type: 'MultiLineString'; coordinates?: Array<Array<[number, number]>> }
+  | { type: string; coordinates?: unknown };
 
 @Injectable()
 export class TransitGtfsService {
@@ -78,9 +114,12 @@ export class TransitGtfsService {
 
   async getAllStops(): Promise<TransitStopDto[]> {
     return this.cache.getOrFetch('transit:stops', CACHE_TTL, async () => {
-      const dbStops = await this.prisma.transitStop.findMany({ orderBy: { name: 'asc' } });
+      const dbStops = await this.prisma.transitStop.findMany({
+        where: { source: STPT_SOURCE },
+        orderBy: { name: 'asc' },
+      });
       if (dbStops.length > 0) {
-        return dbStops.map((s) => ({
+        return dbStops.map((s: { id: string; name: string; latitude: number; longitude: number }) => ({
           id: s.id,
           name: s.name,
           latitude: s.latitude,
@@ -90,13 +129,13 @@ export class TransitGtfsService {
       }
 
       try {
-        const stops = await this.fetchStopsFromOsm();
+        const stops = await this.fetchStopsFromStpt();
         if (stops.length > 0) {
-          this.logger.log(`OSM returned ${stops.length} transit stops`);
+          this.logger.log(`STPT live returned ${stops.length} transit stops`);
           return stops;
         }
       } catch (err) {
-        this.logger.warn(`OSM stops fetch failed: ${err}`);
+        this.logger.warn(`STPT live stops fetch failed: ${err}`);
       }
       return [];
     });
@@ -105,29 +144,34 @@ export class TransitGtfsService {
   /**
    * Main resolution logic:
    * 1. Read from DB
-   * 2. If stale or empty, try fetching from OSM and sync to DB
-   * 3. If OSM fails, return whatever DB has
+   * 2. If stale or empty, try fetching from STPT live and sync to DB
+   * 3. If STPT live fails, return whatever DB has
    */
   private async resolveLines(type?: string): Promise<TransitLineDto[]> {
     const dbLines = await this.fetchFromDb(type);
-    const isFresh = await this.sync.isFresh('transitLine');
+    const isFresh = await this.sync.isFresh('transitLine', STPT_SOURCE);
+    const geometryNeedsRefresh = this.needsGeometryRefresh(dbLines);
 
-    if (dbLines.length > 0 && isFresh) {
+    if (dbLines.length > 0 && isFresh && !geometryNeedsRefresh) {
       this.logger.log(`Serving ${dbLines.length} transit lines from fresh DB`);
       return dbLines;
     }
 
+    if (geometryNeedsRefresh) {
+      this.logger.log('Detected legacy stop-based transit geometry in DB — refreshing from STPT route GeoJSON');
+    }
+
     try {
-      const osmRaw = await this.fetchFromOsm(type);
-      if (osmRaw.length > 0) {
-        this.logger.log(`OSM returned ${osmRaw.length} transit routes — syncing to DB`);
-        this.sync.syncTransitLines(osmRaw).catch((err) =>
+      const stptRaw = await this.fetchFromStpt(type);
+      if (stptRaw.length > 0) {
+        this.logger.log(`STPT live returned ${stptRaw.length} transit route variants — syncing to DB`);
+        this.sync.syncTransitLines(stptRaw, STPT_SOURCE).catch((err) =>
           this.logger.error(`Background transit sync failed: ${err}`),
         );
-        return this.osmLinesToDtos(osmRaw);
+        return this.externalLinesToDtos(stptRaw);
       }
     } catch (err) {
-      this.logger.warn(`OSM transit fetch failed: ${err}`);
+      this.logger.warn(`STPT live transit fetch failed: ${err}`);
     }
 
     if (dbLines.length > 0) {
@@ -138,131 +182,22 @@ export class TransitGtfsService {
     return [];
   }
 
-  private async fetchFromOsm(type?: string): Promise<OsmTransitLine[]> {
-    const routeTypes = type ? [type] : Object.keys(ROUTE_TYPE_MAP);
+  private async fetchFromStpt(type?: string): Promise<ExternalTransitLine[]> {
+    const groups = await this.fetchStptGroups();
+    const filteredGroups = type ? groups.filter((group) => group.type === type) : groups;
+    const variants = await Promise.all(
+      filteredGroups.flatMap((group) =>
+        group.lineNumbers.map((lineNumber) => this.fetchStptLineVariants(group, lineNumber)),
+      ),
+    );
 
-    const filters = routeTypes
-      .map((t) => `relation["type"="route"]["route"="${t}"](${TM_BBOX});`)
-      .join('\n  ');
-
-    // Use `out body qt;` (not `out skel`) for recursed members so node tags (stop names) are included
-    const query = `[out:json][timeout:60];
-(
-  ${filters}
-);
-out body;
->;
-out body qt;`;
-
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-    });
-
-    if (!res.ok) {
-      throw new Error(`Overpass ${res.status}`);
-    }
-
-    const json = await res.json();
-    const elements = json.elements ?? [];
-
-    const nodeMap = new Map<number, { lat: number; lon: number; name?: string }>();
-    const namedNodes: Array<{ lat: number; lon: number; name: string }> = [];
-    for (const el of elements) {
-      if (el.type === 'node' && el.lat && el.lon) {
-        nodeMap.set(el.id, { lat: el.lat, lon: el.lon, name: el.tags?.name });
-        if (el.tags?.name) {
-          namedNodes.push({ lat: el.lat, lon: el.lon, name: el.tags.name });
-        }
-      }
-    }
-
-    // Build a map of way ID → ordered node IDs for road geometry extraction
-    const wayMap = new Map<number, number[]>();
-    for (const el of elements) {
-      if (el.type === 'way' && el.nodes) {
-        wayMap.set(el.id, el.nodes);
-      }
-    }
-
-    this.logger.log(`Node map: ${nodeMap.size} nodes, ${namedNodes.length} named, ${wayMap.size} ways`);
-
-    const lines: OsmTransitLine[] = [];
-    for (const el of elements) {
-      if (el.type !== 'relation' || !el.tags) continue;
-
-      const routeType = ROUTE_TYPE_MAP[el.tags.route] ?? el.tags.route;
-      const ref = el.tags.ref ?? el.tags.name ?? '';
-      const name = el.tags.name ?? `${routeType} ${ref}`;
-
-      const STOP_ROLES = new Set([
-        'stop', 'platform',
-        'stop_entry_only', 'platform_entry_only',
-        'stop_exit_only', 'platform_exit_only',
-      ]);
-      const stopMembers = (el.members ?? []).filter(
-        (m: { type: string; role: string }) =>
-          m.type === 'node' && STOP_ROLES.has(m.role),
-      );
-
-      const stops: OsmTransitLine['stops'] = [];
-      for (let i = 0; i < stopMembers.length; i++) {
-        const node = nodeMap.get(stopMembers[i].ref);
-        if (node && node.lat && node.lon) {
-          let stopName = node.name;
-          if (!stopName) {
-            stopName = this.findNearestName(node.lat, node.lon, namedNodes, 150);
-          }
-          stops.push({
-            osmId: stopMembers[i].ref,
-            name: stopName ?? `Stop ${i + 1}`,
-            latitude: node.lat,
-            longitude: node.lon,
-            stopOrder: i,
-          });
-        }
-      }
-
-      // OSM lists both 'stop' and 'platform' nodes for the same physical stop,
-      // producing consecutive entries with the same name — collapse them.
-      const deduped: typeof stops = [];
-      for (const s of stops) {
-        if (deduped.length === 0 || deduped[deduped.length - 1].name !== s.name) {
-          deduped.push({ ...s, stopOrder: deduped.length });
-        }
-      }
-
-      // Extract road geometry from the way members of this route relation
-      const geometry = this.extractRouteGeometry(el.members ?? [], wayMap, nodeMap);
-
-      if (ref) {
-        lines.push({
-          osmId: el.id,
-          lineNumber: ref,
-          type: routeType,
-          name,
-          color: TYPE_COLORS[routeType] ?? '#6b7280',
-          stops: deduped,
-          geometry,
-        });
-      }
-    }
-
-    lines.sort((a, b) => {
-      const aNum = parseInt(a.lineNumber, 10);
-      const bNum = parseInt(b.lineNumber, 10);
-      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-      return a.lineNumber.localeCompare(b.lineNumber);
-    });
-
-    return lines;
+    return variants.flat().sort((a, b) => this.compareLineNumbers(a.lineNumber, b.lineNumber));
   }
 
-  private osmLinesToDtos(raw: OsmTransitLine[]): TransitLineDto[] {
+  private externalLinesToDtos(raw: ExternalTransitLine[]): TransitLineDto[] {
     const dtos: TransitLineDto[] = raw.map((l) => {
       const stops = l.stops.map((s) => ({
-        id: `osm-stop-${s.osmId}`,
+        id: `${STPT_SOURCE}-stop-${s.osmId}`,
         name: s.name,
         latitude: s.latitude,
         longitude: s.longitude,
@@ -270,7 +205,7 @@ out body qt;`;
       }));
       const geo = l.geometry.length > 0 ? l.geometry : undefined;
       return {
-        id: `osm-route-${l.osmId}`,
+        id: `${STPT_SOURCE}-route-${l.osmId.toString()}`,
         lineNumber: l.lineNumber,
         type: l.type,
         name: l.name,
@@ -278,7 +213,7 @@ out body qt;`;
         stops,
         directions: [{ name: l.name, stops, geometry: geo }],
         geometry: geo,
-        source: 'osm' as const,
+        source: STPT_SOURCE,
       };
     });
     return this.mergeDirections(dtos);
@@ -308,13 +243,13 @@ out body qt;`;
 
       const primary = scored[0].line;
 
-      // Collect unique directions (deduplicate identical stop sequences)
+      // Collect unique directions while preserving distinct tur/retur variants.
       const seenStopKeys = new Set<string>();
       const directions: TransitDirectionDto[] = [];
 
       for (const { line: variant } of scored) {
         for (const dir of variant.directions) {
-          const stopKey = dir.stops.map((s) => s.name).join('|');
+          const stopKey = `${dir.name}|${dir.stops.map((s) => s.id).join('|')}`;
           if (!seenStopKeys.has(stopKey) && dir.stops.length > 0) {
             seenStopKeys.add(stopKey);
             directions.push(dir);
@@ -328,155 +263,388 @@ out body qt;`;
       });
     }
 
-    merged.sort((a, b) => {
-      const aNum = parseInt(a.lineNumber, 10);
-      const bNum = parseInt(b.lineNumber, 10);
-      if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-      return a.lineNumber.localeCompare(b.lineNumber);
-    });
+    merged.sort((a, b) => this.compareLineNumbers(a.lineNumber, b.lineNumber));
 
     return merged;
   }
 
-  /**
-   * Find the nearest named node within `maxMeters` using the Haversine formula.
-   */
-  private findNearestName(
-    lat: number,
-    lon: number,
-    namedNodes: Array<{ lat: number; lon: number; name: string }>,
-    maxMeters: number,
-  ): string | undefined {
-    let bestName: string | undefined;
-    let bestDist = maxMeters;
-
-    for (const n of namedNodes) {
-      const dist = this.haversineMeters(lat, lon, n.lat, n.lon);
-      if (dist < bestDist) {
-        bestDist = dist;
-        bestName = n.name;
-      }
-    }
-
-    return bestName;
-  }
-
-  private haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371000;
-    const toRad = (d: number) => (d * Math.PI) / 180;
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  /**
-   * Chain the way members of a route relation into a continuous coordinate array.
-   *
-   * Strategy: process ways in relation-member order (which reflects the intended
-   * route path). For each way, check if it connects to the current chain via a
-   * shared node ID. If not, check proximity (<100m). If neither, skip it — this
-   * filters out parallel tracks (common in tram routes with separate per-direction
-   * tracks) without creating cross-city jumps.
-   */
-  private extractRouteGeometry(
-    members: Array<{ type: string; ref: number; role: string }>,
-    wayMap: Map<number, number[]>,
-    nodeMap: Map<number, { lat: number; lon: number; name?: string }>,
-  ): [number, number][] {
-    const wayNodes: number[][] = [];
-    for (const m of members) {
-      if (m.type !== 'way') continue;
-      const nodes = wayMap.get(m.ref);
-      if (nodes && nodes.length >= 2) wayNodes.push(nodes);
-    }
-    if (wayNodes.length === 0) return [];
-
-    const nodeCoord = (nid: number): [number, number] | null => {
-      const n = nodeMap.get(nid);
-      return n ? [n.lat, n.lon] : null;
-    };
-
-    const distMeters = (a: number, b: number): number => {
-      const ca = nodeCoord(a);
-      const cb = nodeCoord(b);
-      if (!ca || !cb) return Infinity;
-      const dlat = (ca[0] - cb[0]) * 111320;
-      const dlon = (ca[1] - cb[1]) * 111320 * Math.cos((ca[0] * Math.PI) / 180);
-      return Math.sqrt(dlat * dlat + dlon * dlon);
-    };
-
-    // Start chain with the first way
-    const chain: number[] = [...wayNodes[0]];
-
-    for (let wi = 1; wi < wayNodes.length; wi++) {
-      const seg = wayNodes[wi];
-      const tailNode = chain[chain.length - 1];
-      const segFirst = seg[0];
-      const segLast = seg[seg.length - 1];
-
-      // Exact node match (shared endpoint)
-      if (segFirst === tailNode) {
-        chain.push(...seg.slice(1));
-        continue;
-      }
-      if (segLast === tailNode) {
-        for (let k = seg.length - 2; k >= 0; k--) chain.push(seg[k]);
-        continue;
-      }
-
-      // Proximity check: connect if within 100m
-      const distToFirst = distMeters(tailNode, segFirst);
-      const distToLast = distMeters(tailNode, segLast);
-      const minDist = Math.min(distToFirst, distToLast);
-
-      if (minDist > 250) continue; // skip disconnected ways (parallel track etc.)
-
-      if (distToFirst <= distToLast) {
-        chain.push(...seg.slice(1));
-      } else {
-        for (let k = seg.length - 2; k >= 0; k--) chain.push(seg[k]);
-      }
-    }
-
-    return chain
-      .map((nid) => nodeCoord(nid))
-      .filter((c): c is [number, number] => c !== null);
-  }
-
-  private async fetchStopsFromOsm(): Promise<TransitStopDto[]> {
-    const query = `[out:json][timeout:25];
-(
-  node["public_transport"="stop_position"](${TM_BBOX});
-  node["highway"="bus_stop"](${TM_BBOX});
-  node["railway"="tram_stop"](${TM_BBOX});
-);
-out;`;
-
-    const res = await fetch(OVERPASS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
+  private async fetchStptGroups(): Promise<StptLineGroup[]> {
+    const res = await fetch(`${STPT_BASE_URL}/`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 TimisoaraApp/1.0' },
     });
 
-    if (!res.ok) throw new Error(`Overpass ${res.status}`);
-    const json = await res.json();
+    if (!res.ok) {
+      throw new Error(`STPT live homepage ${res.status}`);
+    }
 
-    return (json.elements ?? [])
-      .filter((el: { tags?: { name?: string }; lat?: number; lon?: number }) => el.tags?.name && el.lat && el.lon)
-      .map((el: { id: number; tags: { name: string }; lat: number; lon: number }, i: number) => ({
-        id: `osm-stop-${el.id}`,
-        name: el.tags.name,
-        latitude: el.lat,
-        longitude: el.lon,
-        stopOrder: i,
-      }));
+    const html = await res.text();
+    const groupRegex = /<div class='sidebar-group'><div class='sidebar-group-label'>(.*?)<\/div><div class='sidebar-group-buttons'>(.*?)<\/div><\/div>/g;
+    const groups: StptLineGroup[] = [];
+
+    for (const match of html.matchAll(groupRegex)) {
+      const label = this.decodeHtml(match[1]).trim();
+      const normalizedLabel = this.normalizeCategoryLabel(label);
+      const type = STPT_LABEL_TYPE_MAP[normalizedLabel];
+      if (!type) continue;
+
+      const buttons = match[2];
+      const lineNumbers = Array.from(buttons.matchAll(/href='\?linie=([^']+)'/g), (lineMatch) =>
+        this.normalizeLineNumber(lineMatch[1]),
+      );
+      const colorMatch = buttons.match(/background:\s*(#[0-9a-fA-F]{6})/);
+
+      if (lineNumbers.length === 0) continue;
+
+      groups.push({
+        label,
+        type,
+        lineNumbers,
+        color: colorMatch?.[1]?.toUpperCase() ?? TYPE_COLORS[type] ?? '#6B7280',
+      });
+    }
+
+    return groups;
+  }
+
+  private async fetchStptLineVariants(
+    group: StptLineGroup,
+    lineNumber: string,
+  ): Promise<ExternalTransitLine[]> {
+    const res = await fetch(
+      `${STPT_BASE_URL}/linii-config-json.php?line=${encodeURIComponent(lineNumber)}&v=1`,
+      { headers: { 'User-Agent': 'Mozilla/5.0 TimisoaraApp/1.0' } },
+    );
+
+    if (!res.ok) {
+      throw new Error(`STPT live line ${lineNumber} ${res.status}`);
+    }
+
+    const payload = (await res.json()) as Record<string, { tur?: StptDirectionPayload; retur?: StptDirectionPayload }>;
+    const rootKey = [lineNumber, lineNumber.toLowerCase(), lineNumber.toUpperCase()].find(
+      (candidate) => candidate in payload,
+    );
+    const linePayload = rootKey ? payload[rootKey] : Object.values(payload)[0];
+
+    if (!linePayload) {
+      return [];
+    }
+
+    const directions = [
+      { key: 'tur', label: 'Tur', data: linePayload.tur },
+      { key: 'retur', label: 'Retur', data: linePayload.retur },
+    ] as const;
+
+    return directions
+      .map(async ({ key, label, data }) => {
+        const stops = this.mapStptStops(lineNumber, key, data);
+        if (stops.length < 2) return null;
+
+        const firstStop = stops[0].name;
+        const lastStop = stops[stops.length - 1].name;
+        const routeGeometry = await this.fetchRouteGeometry(lineNumber, key);
+
+        return {
+          osmId: this.makeStableId('line', `${group.type}:${lineNumber}:${key}`),
+          lineNumber,
+          type: group.type,
+          name: `${label}: ${firstStop} → ${lastStop}`,
+          color: group.color,
+          stops,
+          geometry: routeGeometry.length > 1 ? routeGeometry : this.mapStptGeometry(data?.coords),
+        } satisfies ExternalTransitLine;
+      })
+      .reduce<Promise<ExternalTransitLine[]>>(async (accPromise, itemPromise) => {
+        const acc = await accPromise;
+        const item = await itemPromise;
+        if (item) acc.push(item);
+        return acc;
+      }, Promise.resolve([]));
+  }
+
+  private mapStptStops(
+    lineNumber: string,
+    directionKey: 'tur' | 'retur',
+    data?: StptDirectionPayload,
+  ): ExternalTransitLine['stops'] {
+    const ids = Array.isArray(data?.ids) ? data.ids : [];
+    const stations = Array.isArray(data?.stations) ? data.stations : [];
+    const coords = Array.isArray(data?.coords) ? data.coords : [];
+    const limit = Math.max(ids.length, stations.length, coords.length);
+    const stops: ExternalTransitLine['stops'] = [];
+
+    for (let index = 0; index < limit; index++) {
+      const stopId = ids[index];
+      const stopName = stations[index]?.trim();
+      if (!stopName) continue;
+
+      const coord = this.resolveStopCoordinate(coords, index);
+      if (!coord) continue;
+
+      const [longitude, latitude] = coord;
+
+      stops.push({
+        osmId: this.makeStableId('stop', stopId || `${lineNumber}:${directionKey}:${index}:${stopName}`),
+        name: stopName,
+        latitude,
+        longitude,
+        stopOrder: stops.length,
+      });
+    }
+
+    return this.deduplicateConsecutiveStops(stops);
+  }
+
+  private mapStptGeometry(coords?: Array<[number, number]>): [number, number][] {
+    if (!Array.isArray(coords)) return [];
+
+    const geometry: [number, number][] = [];
+    for (const point of coords) {
+      if (!Array.isArray(point) || point.length < 2) continue;
+      const [longitude, latitude] = point;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) continue;
+
+      const previous = geometry[geometry.length - 1];
+      if (previous && previous[0] === latitude && previous[1] === longitude) continue;
+      geometry.push([latitude, longitude]);
+    }
+
+    return this.sanitizeGeometry(geometry);
+  }
+
+  private resolveStopCoordinate(
+    coords: Array<[number, number]> | undefined,
+    index: number,
+  ): [number, number] | null {
+    if (!Array.isArray(coords)) {
+      return null;
+    }
+
+    const current = this.normalizeStopCoordinate(coords[index]);
+    if (current) {
+      return current;
+    }
+
+    let previous: [number, number] | null = null;
+    for (let cursor = index - 1; cursor >= 0; cursor--) {
+      previous = this.normalizeStopCoordinate(coords[cursor]);
+      if (previous) break;
+    }
+
+    let next: [number, number] | null = null;
+    for (let cursor = index + 1; cursor < coords.length; cursor++) {
+      next = this.normalizeStopCoordinate(coords[cursor]);
+      if (next) break;
+    }
+
+    if (previous && next) {
+      return [
+        (previous[0] + next[0]) / 2,
+        (previous[1] + next[1]) / 2,
+      ];
+    }
+
+    return previous ?? next ?? null;
+  }
+
+  private normalizeStopCoordinate(point: unknown): [number, number] | null {
+    if (!Array.isArray(point) || point.length < 2) {
+      return null;
+    }
+
+    const [longitude, latitude] = point;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    return [longitude, latitude];
+  }
+
+  private async fetchRouteGeometry(lineNumber: string, direction: 'tur' | 'retur'): Promise<[number, number][]> {
+    const urls = [
+      `${STPT_BASE_URL}/routes/${encodeURIComponent(lineNumber)}-${direction}.geojson`,
+      `${STPT_BASE_URL}/routes/${encodeURIComponent(lineNumber.toUpperCase())}-${direction}.geojson`,
+      `${STPT_BASE_URL}/routes/${encodeURIComponent(lineNumber.toLowerCase())}-${direction}.geojson`,
+    ];
+
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 TimisoaraApp/1.0', Accept: 'application/geo+json,application/json' },
+        });
+
+        if (!res.ok) {
+          continue;
+        }
+
+        const data = (await res.json()) as GeoJsonFeatureCollection;
+        const geometry = this.extractRouteGeometry(data);
+        if (geometry.length > 1) {
+          return geometry;
+        }
+      } catch (error) {
+        this.logger.debug(`Route geometry fetch failed for ${lineNumber} ${direction} from ${url}: ${error}`);
+      }
+    }
+
+    return [];
+  }
+
+  private extractRouteGeometry(data: GeoJsonFeatureCollection): [number, number][] {
+    if (!Array.isArray(data?.features)) {
+      return [];
+    }
+
+    const geometry: [number, number][] = [];
+
+    for (const feature of data.features) {
+      const current = feature?.geometry;
+      if (!current) continue;
+
+      if (current.type === 'LineString' && Array.isArray(current.coordinates)) {
+        for (const point of current.coordinates) {
+          this.pushGeoJsonPoint(geometry, point);
+        }
+      }
+
+      if (current.type === 'MultiLineString' && Array.isArray(current.coordinates)) {
+        for (const segment of current.coordinates) {
+          if (!Array.isArray(segment)) continue;
+          for (const point of segment) {
+            this.pushGeoJsonPoint(geometry, point);
+          }
+        }
+      }
+    }
+
+    return this.sanitizeGeometry(geometry);
+  }
+
+  private pushGeoJsonPoint(geometry: [number, number][], point: unknown): void {
+    if (!Array.isArray(point) || point.length < 2) {
+      return;
+    }
+
+    const [longitude, latitude] = point;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+
+    geometry.push([latitude, longitude]);
+  }
+
+  private sanitizeGeometry(points: [number, number][]): [number, number][] {
+    const sanitized: [number, number][] = [];
+
+    for (const point of points) {
+      const [latitude, longitude] = point;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        continue;
+      }
+
+      const previous = sanitized[sanitized.length - 1];
+      if (previous && previous[0] === latitude && previous[1] === longitude) {
+        continue;
+      }
+
+      sanitized.push([latitude, longitude]);
+    }
+
+    return sanitized;
+  }
+
+  private needsGeometryRefresh(lines: TransitLineDto[]): boolean {
+    if (lines.length === 0) {
+      return false;
+    }
+
+    return lines.some((line) =>
+      line.directions.some((direction) => {
+        const pointCount = direction.geometry?.length ?? 0;
+        return pointCount === 0 || pointCount <= direction.stops.length + 1;
+      }),
+    );
+  }
+
+  private deduplicateConsecutiveStops(stops: ExternalTransitLine['stops']): ExternalTransitLine['stops'] {
+    const deduplicated: ExternalTransitLine['stops'] = [];
+
+    for (const stop of stops) {
+      const previous = deduplicated[deduplicated.length - 1];
+      if (
+        previous &&
+        previous.osmId === stop.osmId &&
+        previous.name === stop.name &&
+        previous.latitude === stop.latitude &&
+        previous.longitude === stop.longitude
+      ) continue;
+      deduplicated.push({ ...stop, stopOrder: deduplicated.length });
+    }
+
+    return deduplicated;
+  }
+
+  private async fetchStopsFromStpt(): Promise<TransitStopDto[]> {
+    const lines = await this.fetchFromStpt();
+    const stops = new Map<string, TransitStopDto>();
+
+    for (const line of lines) {
+      for (const stop of line.stops) {
+        if (!stops.has(String(stop.osmId))) {
+          stops.set(String(stop.osmId), {
+            id: `${STPT_SOURCE}-stop-${stop.osmId}`,
+            name: stop.name,
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+            stopOrder: 0,
+          });
+        }
+      }
+    }
+
+    return Array.from(stops.values()).sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+  }
+
+  private compareLineNumbers(first: string, second: string): number {
+    return first.localeCompare(second, 'ro', { numeric: true, sensitivity: 'base' });
+  }
+
+  private normalizeCategoryLabel(label: string): string {
+    return this.decodeHtml(label)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  private normalizeLineNumber(lineNumber: string): string {
+    return this.decodeHtml(lineNumber).trim().toUpperCase();
+  }
+
+  private decodeHtml(value: string): string {
+    return value
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&#536;|&#x218;/gi, 'Ș')
+      .replace(/&#537;|&#x219;/gi, 'ș')
+      .replace(/&#538;|&#x21A;/gi, 'Ț')
+      .replace(/&#539;|&#x21B;/gi, 'ț');
+  }
+
+  private makeStableId(namespace: string, value: string): bigint {
+    const input = `${namespace}:${value}`;
+    let hash = 1469598103934665603n;
+
+    for (const char of input) {
+      hash ^= BigInt(char.codePointAt(0) ?? 0);
+      hash *= 1099511628211n;
+      hash &= 0x7fffffffffffffffn;
+    }
+
+    return hash;
   }
 
   private async fetchFromDb(type?: string): Promise<TransitLineDto[]> {
-    const where = type ? { type } : {};
+    const where = type ? { source: STPT_SOURCE, type } : { source: STPT_SOURCE };
     const lines = await this.prisma.transitLine.findMany({
       where,
       include: {
@@ -485,8 +653,8 @@ out;`;
       orderBy: { lineNumber: 'asc' },
     });
 
-    const all: TransitLineDto[] = lines.map((line) => {
-      const stops = line.stops.map((ls) => ({
+    const all: TransitLineDto[] = lines.map((line: any) => {
+      const stops = line.stops.map((ls: any) => ({
         id: ls.stop.id,
         name: ls.stop.name,
         latitude: ls.stop.latitude,

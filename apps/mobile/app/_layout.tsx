@@ -1,11 +1,27 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import { isTransitStandalone, mobileAppTitle } from '@/constants/features';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { isTransitStandalone } from '@/constants/features';
+import { I18nProvider, useI18n } from '@/lib/i18n';
 
 const PRIMARY_COLOR = '#ec6c21';
+const GestureRoot = GestureHandlerRootView as any;
 
 export default function RootLayout() {
+  return (
+    <GestureRoot style={{ flex: 1 }}>
+      <I18nProvider>
+        <TabsLayout />
+      </I18nProvider>
+    </GestureRoot>
+  );
+}
+
+function TabsLayout() {
+  const { t } = useI18n();
+  const appTitle = isTransitStandalone ? t('app.titleTransit') : t('app.title');
+
   return (
     <>
       <StatusBar style="dark" />
@@ -38,8 +54,8 @@ export default function RootLayout() {
         <Tabs.Screen
           name="explore/index"
           options={{
-            title: 'Explore',
-            headerTitle: mobileAppTitle,
+            title: t('nav.explore'),
+            headerTitle: appTitle,
             href: isTransitStandalone ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="map-outline" size={size} color={color} />
@@ -49,7 +65,7 @@ export default function RootLayout() {
         <Tabs.Screen
           name="events/index"
           options={{
-            title: 'Events',
+            title: t('nav.events'),
             href: isTransitStandalone ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="calendar-outline" size={size} color={color} />
@@ -59,8 +75,8 @@ export default function RootLayout() {
         <Tabs.Screen
           name="transit/index"
           options={{
-            title: 'Transit',
-            headerTitle: mobileAppTitle,
+            title: t('nav.transit'),
+            headerTitle: appTitle,
             headerShown: false,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="bus-outline" size={size} color={color} />
@@ -70,7 +86,7 @@ export default function RootLayout() {
         <Tabs.Screen
           name="dining/index"
           options={{
-            title: 'Dining',
+            title: t('nav.dining'),
             href: isTransitStandalone ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="restaurant-outline" size={size} color={color} />
@@ -80,7 +96,7 @@ export default function RootLayout() {
         <Tabs.Screen
           name="profile/index"
           options={{
-            title: 'Profile',
+            title: t('nav.profile'),
             href: isTransitStandalone ? null : undefined,
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person-outline" size={size} color={color} />

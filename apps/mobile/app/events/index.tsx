@@ -3,25 +3,28 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet } from 
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { isTransitStandalone } from '@/constants/features';
+import { useI18n } from '@/lib/i18n';
 
 const PRIMARY = '#ec6c21';
 
 const EVENTS = [
-  { id: '1', title: 'Jazz TM Festival', category: 'Music', date: 'Apr 5-8', venue: 'Multiple venues', price: 'from 50 RON', isFree: false },
-  { id: '2', title: 'Hamlet', category: 'Theater', date: 'Apr 2, 20:00', venue: 'Teatrul Național', price: '30-80 RON', isFree: false },
-  { id: '3', title: 'Colors of Banat', category: 'Art', date: 'Apr 1 - May 1', venue: 'Muzeul de Artă', price: '15 RON', isFree: false },
-  { id: '4', title: 'Farmers Market', category: 'Food', date: 'Every Saturday', venue: 'Piața 700', price: '', isFree: true },
-  { id: '5', title: 'Open Air Cinema', category: 'Free', date: 'Apr 7, 21:00', venue: 'Parcul Rozelor', price: '', isFree: true },
-  { id: '6', title: 'Tech Meetup: AI', category: 'Meetup', date: 'Apr 10, 18:30', venue: 'Bastionul Theresia', price: '', isFree: true },
+  { id: '1', title: 'Jazz TM Festival', category: 'music', date: 'Apr 5-8', venue: 'Multiple venues', price: 'from 50 RON', isFree: false },
+  { id: '2', title: 'Hamlet', category: 'theater', date: 'Apr 2, 20:00', venue: 'Teatrul Național', price: '30-80 RON', isFree: false },
+  { id: '3', title: 'Colors of Banat', category: 'art', date: 'Apr 1 - May 1', venue: 'Muzeul de Artă', price: '15 RON', isFree: false },
+  { id: '4', title: 'Farmers Market', category: 'food', date: 'Every Saturday', venue: 'Piața 700', price: '', isFree: true },
+  { id: '5', title: 'Open Air Cinema', category: 'free', date: 'Apr 7, 21:00', venue: 'Parcul Rozelor', price: '', isFree: true },
+  { id: '6', title: 'Tech Meetup: AI', category: 'meetup', date: 'Apr 10, 18:30', venue: 'Bastionul Theresia', price: '', isFree: true },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  Music: '#8b5cf6', Theater: '#ec4899', Art: '#f59e0b',
-  Food: '#10b981', Free: '#27c070', Meetup: '#3b82f6',
-  Sports: '#ef4444', Family: '#f97316',
+  music: '#8b5cf6', theater: '#ec4899', art: '#f59e0b',
+  food: '#10b981', free: '#27c070', meetup: '#3b82f6',
+  sports: '#ef4444', family: '#f97316',
 };
 
 export default function EventsScreen() {
+  const { t } = useI18n();
+
   if (isTransitStandalone) {
     return <Redirect href="/transit" />;
   }
@@ -44,7 +47,7 @@ export default function EventsScreen() {
         <Ionicons name="search" size={18} color="#9ca3af" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search events..."
+          placeholder={t('events.searchPlaceholder')}
           placeholderTextColor="#9ca3af"
           value={search}
           onChangeText={setSearch}
@@ -58,14 +61,14 @@ export default function EventsScreen() {
           <TouchableOpacity key={event.id} style={styles.card}>
             <View style={styles.cardLeft}>
               <View style={[styles.categoryBadge, { backgroundColor: CATEGORY_COLORS[event.category] || '#6b7280' }]}>
-                <Text style={styles.categoryText}>{event.category}</Text>
+                <Text style={styles.categoryText}>{t(`events.category.${event.category}`)}</Text>
               </View>
               <Text style={styles.title}>{event.title}</Text>
               <Text style={styles.date}>{event.date}</Text>
               <Text style={styles.venue}>{event.venue}</Text>
               {event.isFree ? (
                 <View style={styles.freeBadge}>
-                  <Text style={styles.freeText}>Free</Text>
+                  <Text style={styles.freeText}>{t('common.free')}</Text>
                 </View>
               ) : (
                 <Text style={styles.price}>{event.price}</Text>
