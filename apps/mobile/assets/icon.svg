@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Timișoara Public Transport app icon</title>
+  <desc id="desc">Rounded orange app icon with a stylized tram and route line.</desc>
+  <defs>
+    <linearGradient id="bg" x1="138" y1="110" x2="886" y2="914" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb44b" />
+      <stop offset="0.55" stop-color="#ec6c21" />
+      <stop offset="1" stop-color="#b64510" />
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg)" />
+  <path
+    d="M232 748C308 646 392 564 494 500C599 434 690 350 792 236"
+    fill="none"
+    stroke="#0f766e"
+    stroke-linecap="round"
+    stroke-width="76"
+  />
+  <circle cx="232" cy="748" r="40" fill="#115e59" />
+  <circle cx="792" cy="236" r="40" fill="#115e59" />
+  <path d="M356 216H668" fill="none" stroke="#ffedd5" stroke-linecap="round" stroke-width="22" />
+  <path d="M420 162V216" fill="none" stroke="#ffedd5" stroke-linecap="round" stroke-width="22" />
+  <path d="M604 162V216" fill="none" stroke="#ffedd5" stroke-linecap="round" stroke-width="22" />
+  <rect x="254" y="246" width="516" height="432" rx="132" fill="#fffaf0" />
+  <rect x="314" y="314" width="156" height="146" rx="36" fill="#f6ad2e" />
+  <rect x="554" y="314" width="156" height="146" rx="36" fill="#f6ad2e" />
+  <rect x="390" y="508" width="244" height="44" rx="22" fill="#0f766e" />
+  <rect x="326" y="586" width="372" height="34" rx="17" fill="#f6ad2e" />
+  <path d="M336 678L292 792" fill="none" stroke="#fffaf0" stroke-linecap="round" stroke-width="34" />
+  <path d="M688 678L732 792" fill="none" stroke="#fffaf0" stroke-linecap="round" stroke-width="34" />
+  <path d="M308 776H716" fill="none" stroke="#ffedd5" stroke-linecap="round" stroke-width="30" />
+  <circle cx="398" cy="716" r="42" fill="#111827" />
+  <circle cx="626" cy="716" r="42" fill="#111827" />
+  <circle cx="398" cy="716" r="18" fill="#fffaf0" />
+  <circle cx="626" cy="716" r="18" fill="#fffaf0" />
+  <path d="M436 384H588" fill="none" stroke="#fffaf0" stroke-linecap="round" stroke-width="18" />
+</svg>
