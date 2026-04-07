@@ -16,6 +16,7 @@ jobs:
     env:
       CI: '1'
       COCOAPODS_DISABLE_STATS: 'true'
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
       EXPO_PUBLIC_API_URL: https://timisoara-app-production.up.railway.app
       EXPO_PUBLIC_STANDALONE_TRANSIT: 'true'
 
