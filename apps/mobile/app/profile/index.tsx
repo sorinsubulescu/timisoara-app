@@ -1,4 +1,5 @@
 import { Redirect } from 'expo-router';
+import Constants from 'expo-constants';
 import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +11,8 @@ const PRIMARY = '#ec6c21';
 export default function ProfileScreen() {
   const { language, languages, setLanguage, t } = useI18n();
   const currentLanguage = languages.find((item) => item.code === language);
+  const appName = Constants.expoConfig?.name ?? 'Timișoara Public Transport';
+  const appVersion = Constants.expoConfig?.version ?? '0.1.0';
 
   if (isTransitStandalone) {
     return <Redirect href="/transit" />;
@@ -106,7 +109,7 @@ export default function ProfileScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.version}>{t('common.version', { version: '0.1.0' })}</Text>
+      <Text style={styles.version}>{`${appName} v${appVersion}`}</Text>
     </ScrollView>
   );
 }

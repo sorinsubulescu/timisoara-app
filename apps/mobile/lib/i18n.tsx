@@ -18,7 +18,7 @@ export type LanguageCode = (typeof SUPPORTED_LANGUAGES)[number]['code'];
 type TranslationParams = Record<string, string | number>;
 
 const DEFAULT_LANGUAGE: LanguageCode = 'ro';
-const LANGUAGE_STORAGE_KEY = 'timisoara-app.language';
+const LANGUAGE_STORAGE_KEY = 'timisoara-public-transport.language';
 
 type I18nContextValue = {
   language: LanguageCode;
@@ -54,7 +54,7 @@ const translations = {
     'common.notifications': 'Notifications',
     'common.savedPlaces': 'Saved Places',
     'common.savedEvents': 'Saved Events',
-    'common.version': 'Timișoara App v{version}',
+    'common.version': 'Timișoara Public Transport v{version}',
     'explore.searchPlaceholder': 'Search Timișoara...',
     'explore.landmarks': 'Landmarks',
     'explore.museums': 'Museums',
@@ -154,7 +154,7 @@ const translations = {
     'common.notifications': 'Notificări',
     'common.savedPlaces': 'Locuri salvate',
     'common.savedEvents': 'Evenimente salvate',
-    'common.version': 'Aplicația Timișoara v{version}',
+    'common.version': 'Transport public Timișoara v{version}',
     'explore.searchPlaceholder': 'Caută în Timișoara...',
     'explore.landmarks': 'Repere',
     'explore.museums': 'Muzee',
@@ -254,7 +254,7 @@ const translations = {
     'common.notifications': 'Benachrichtigungen',
     'common.savedPlaces': 'Gespeicherte Orte',
     'common.savedEvents': 'Gespeicherte Events',
-    'common.version': 'Timișoara App v{version}',
+    'common.version': 'Öffentlicher Verkehr Timișoara v{version}',
     'explore.searchPlaceholder': 'Timișoara durchsuchen...',
     'explore.landmarks': 'Sehenswürdigkeiten',
     'explore.museums': 'Museen',
@@ -354,7 +354,7 @@ const translations = {
     'common.notifications': 'Értesítések',
     'common.savedPlaces': 'Mentett helyek',
     'common.savedEvents': 'Mentett események',
-    'common.version': 'Temesvár App v{version}',
+    'common.version': 'Temesvár közösségi közlekedés v{version}',
     'explore.searchPlaceholder': 'Keresés Temesváron...',
     'explore.landmarks': 'Látnivalók',
     'explore.museums': 'Múzeumok',
@@ -454,7 +454,7 @@ const translations = {
     'common.notifications': 'Obaveštenja',
     'common.savedPlaces': 'Sačuvana mesta',
     'common.savedEvents': 'Sačuvani događaji',
-    'common.version': 'Temišvar aplikacija v{version}',
+    'common.version': 'Javni prevoz Temišvar v{version}',
     'explore.searchPlaceholder': 'Pretraži Temišvar...',
     'explore.landmarks': 'Znamenitosti',
     'explore.museums': 'Muzeji',
@@ -554,7 +554,7 @@ const translations = {
     'common.notifications': 'Notifiche',
     'common.savedPlaces': 'Luoghi salvati',
     'common.savedEvents': 'Eventi salvati',
-    'common.version': 'App Timișoara v{version}',
+    'common.version': 'Trasporto pubblico Timișoara v{version}',
     'explore.searchPlaceholder': 'Cerca a Timișoara...',
     'explore.landmarks': 'Luoghi simbolo',
     'explore.museums': 'Musei',
@@ -654,7 +654,7 @@ const translations = {
     'common.notifications': 'Notificaciones',
     'common.savedPlaces': 'Lugares guardados',
     'common.savedEvents': 'Eventos guardados',
-    'common.version': 'App Timișoara v{version}',
+    'common.version': 'Transporte público Timișoara v{version}',
     'explore.searchPlaceholder': 'Buscar en Timișoara...',
     'explore.landmarks': 'Lugares emblemáticos',
     'explore.museums': 'Museos',
@@ -754,7 +754,7 @@ const translations = {
     'common.notifications': 'Notifications',
     'common.savedPlaces': 'Lieux enregistrés',
     'common.savedEvents': 'Événements enregistrés',
-    'common.version': 'App Timișoara v{version}',
+    'common.version': 'Transports publics Timișoara v{version}',
     'explore.searchPlaceholder': 'Rechercher à Timișoara...',
     'explore.landmarks': 'Incontournables',
     'explore.museums': 'Musées',
@@ -854,7 +854,7 @@ const translations = {
     'common.notifications': 'Powiadomienia',
     'common.savedPlaces': 'Zapisane miejsca',
     'common.savedEvents': 'Zapisane wydarzenia',
-    'common.version': 'Aplikacja Timișoara v{version}',
+    'common.version': 'Transport publiczny Timișoara v{version}',
     'explore.searchPlaceholder': 'Szukaj w Timișoarze...',
     'explore.landmarks': 'Atrakcje',
     'explore.museums': 'Muzea',
@@ -954,7 +954,7 @@ const translations = {
     'common.notifications': 'Сповіщення',
     'common.savedPlaces': 'Збережені місця',
     'common.savedEvents': 'Збережені події',
-    'common.version': 'Додаток Тімішоара v{version}',
+    'common.version': 'Громадський транспорт Тімішоара v{version}',
     'explore.searchPlaceholder': 'Шукати в Тімішоарі...',
     'explore.landmarks': 'Пам’ятки',
     'explore.museums': 'Музеї',

@@ -2,12 +2,6 @@ name: iOS Simulator Build
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - .github/workflows/ios-simulator-build.yml
-      - apps/mobile/**
-      - package.json
-      - package-lock.json
 
 jobs:
   build-ios-simulator:

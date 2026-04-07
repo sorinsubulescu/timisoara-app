@@ -1,18 +1,19 @@
 {
   "expo": {
-    "name": "Timișoara App",
-    "slug": "timisoara-app",
+    "name": "Timișoara Public Transport",
+    "slug": "timisoara-public-transport",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "timisoara",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
     "splash": {
       "backgroundColor": "#ec6c21",
       "resizeMode": "contain"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.timisoara.app",
+      "bundleIdentifier": "com.timisoara.publictransport",
       "config": {
         "usesNonExemptEncryption": false
       }
@@ -21,7 +22,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#ec6c21"
       },
-      "package": "com.timisoara.app"
+      "package": "com.timisoara.publictransport"
     },
     "plugins": [
       "expo-router"
