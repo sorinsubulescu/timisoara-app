@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Timișoara Public Transport",
-    "slug": "timisoara-public-transport",
+    "slug": "timisoara-app",
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "timisoara",
