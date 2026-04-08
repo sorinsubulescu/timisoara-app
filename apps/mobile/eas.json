@@ -6,6 +6,7 @@
   "build": {
     "preview": {
       "distribution": "internal",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://timisoara-app-production.up.railway.app",
         "EXPO_PUBLIC_STANDALONE_TRANSIT": "true"
@@ -24,6 +25,7 @@
       }
     },
     "production": {
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://timisoara-app-production.up.railway.app",
         "EXPO_PUBLIC_STANDALONE_TRANSIT": "true"
