@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
 const DEFAULT_API_PORT = '4000';
+const DEFAULT_PRODUCTION_API_BASE = 'https://timisoara-app-production.up.railway.app';
 const STATIC_TRANSIT_LINES_CACHE_KEY = 'transit.lines.compact.v1';
 const STATIC_TRANSIT_LINES_TTL_MS = 6 * 60 * 60 * 1000;
 
@@ -51,11 +52,12 @@ interface CachedApiPayload<T> {
 }
 
 function resolveApiBase(): string {
-  const runtimeProcess = (globalThis as Record<string, unknown>)['process'] as
-    | { env?: Record<string, string | undefined> }
-    | undefined;
-  const envBase = runtimeProcess?.env?.EXPO_PUBLIC_API_URL?.trim();
+  const envBase = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (envBase) return envBase.replace(/\/$/, '');
+
+  if (!__DEV__) {
+    return DEFAULT_PRODUCTION_API_BASE;
+  }
 
   const expoHostUri =
     Constants.expoConfig?.hostUri ||
