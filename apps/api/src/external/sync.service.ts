@@ -10,6 +10,24 @@ const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse';
 const NOMINATIM_UA = 'TimisoaraApp/1.0';
 const NOMINATIM_DELAY_MS = 1500; // Nominatim policy: max 1 req/sec, extra buffer for concurrent jobs
 
+type TransitSyncStop = {
+  osmId: number | bigint;
+  name: string;
+  latitude: number;
+  longitude: number;
+  stopOrder: number;
+};
+
+type TransitSyncLine = {
+  osmId: number | bigint;
+  lineNumber: string;
+  type: string;
+  name: string;
+  color: string;
+  stops: TransitSyncStop[];
+  geometry?: [number, number][];
+};
+
 /**
  * Extract neighborhood from the POI's own OSM tags.
  * Only returns a value when the mapper explicitly tagged it.
@@ -88,6 +106,7 @@ function computePopularity(tags: Record<string, string>): number {
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
   private geocodeLock: Promise<void> = Promise.resolve();
+  private readonly transitSyncLocks = new Map<string, Promise<number>>();
 
   constructor(
     private prisma: PrismaService,
@@ -380,18 +399,26 @@ export class SyncService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async syncTransitLines(
-    lines: Array<{
-      osmId: number | bigint;
-      lineNumber: string;
-      type: string;
-      name: string;
-      color: string;
-      stops: Array<{ osmId: number | bigint; name: string; latitude: number; longitude: number; stopOrder: number }>;
-      geometry?: [number, number][];
-    }>,
-    source = 'osm',
-  ): Promise<number> {
+  async syncTransitLines(lines: TransitSyncLine[], source = 'osm'): Promise<number> {
+    const activeSync = this.transitSyncLocks.get(source);
+    if (activeSync) {
+      this.logger.log(`Transit sync already running for source ${source} — joining existing run`);
+      return activeSync;
+    }
+
+    const pendingSync = this.doSyncTransitLines(lines, source);
+    this.transitSyncLocks.set(source, pendingSync);
+
+    try {
+      return await pendingSync;
+    } finally {
+      if (this.transitSyncLocks.get(source) === pendingSync) {
+        this.transitSyncLocks.delete(source);
+      }
+    }
+  }
+
+  private async doSyncTransitLines(lines: TransitSyncLine[], source: string): Promise<number> {
     const now = new Date();
     let upserted = 0;
 
@@ -425,7 +452,16 @@ export class SyncService {
         // Clear old stop associations for this line
         await this.prisma.transitLineStop.deleteMany({ where: { lineId: dbLine.id } });
 
-        for (const stop of line.stops) {
+        const uniqueStops = this.deduplicateTransitLineStops(line.stops);
+        if (uniqueStops.length !== line.stops.length) {
+          this.logger.warn(
+            `Transit line ${line.lineNumber} contained ${line.stops.length - uniqueStops.length} duplicate stop references; collapsing before sync`,
+          );
+        }
+
+        const lineStopRows: Array<{ lineId: string; stopId: string; stopOrder: number }> = [];
+
+        for (const stop of uniqueStops) {
           const stopId = this.toBigIntId(stop.osmId);
           const dbStop = await this.prisma.transitStop.upsert({
             where: { osmId: stopId },
@@ -446,14 +482,17 @@ export class SyncService {
             },
           });
 
-          await this.prisma.transitLineStop.create({
-            data: {
-              lineId: dbLine.id,
-              stopId: dbStop.id,
-              stopOrder: stop.stopOrder,
-            },
-          }).catch(() => {
-            // duplicate key — stop already linked to this line
+          lineStopRows.push({
+            lineId: dbLine.id,
+            stopId: dbStop.id,
+            stopOrder: stop.stopOrder,
+          });
+        }
+
+        if (lineStopRows.length > 0) {
+          await this.prisma.transitLineStop.createMany({
+            data: lineStopRows,
+            skipDuplicates: true,
           });
         }
 
@@ -465,6 +504,26 @@ export class SyncService {
 
     this.logger.log(`Synced ${upserted}/${lines.length} transit lines to DB`);
     return upserted;
+  }
+
+  private deduplicateTransitLineStops(stops: TransitSyncStop[]): TransitSyncStop[] {
+    const deduplicated: TransitSyncStop[] = [];
+    const seenStopIds = new Set<string>();
+
+    for (const stop of stops) {
+      const stopKey = this.toBigIntId(stop.osmId).toString();
+      if (seenStopIds.has(stopKey)) {
+        continue;
+      }
+
+      seenStopIds.add(stopKey);
+      deduplicated.push({
+        ...stop,
+        stopOrder: deduplicated.length,
+      });
+    }
+
+    return deduplicated;
   }
 
   private toBigIntId(value: number | bigint): bigint {

@@ -13,6 +13,7 @@ interface CacheEntry<T> {
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
   private readonly store = new Map<string, CacheEntry<unknown>>();
+  private readonly inFlight = new Map<string, Promise<unknown>>();
 
   async get<T>(key: string): Promise<T | null> {
     const entry = this.store.get(key) as CacheEntry<T> | undefined;
@@ -38,24 +39,46 @@ export class CacheService {
     const cached = await this.get<T>(key);
     if (cached !== null) return cached;
 
-    this.logger.log(`Cache MISS: ${key} — fetching from source`);
-    const data = await fetcher();
-    const isEmpty = Array.isArray(data) && data.length === 0;
-    if (!isEmpty) {
-      await this.set(key, data, ttlSeconds);
-    } else {
-      this.logger.warn(`Cache SKIP: ${key} — empty result, will retry next request`);
+    const activeFetch = this.inFlight.get(key) as Promise<T> | undefined;
+    if (activeFetch) {
+      this.logger.debug(`Cache WAIT: ${key} — joining in-flight fetch`);
+      return activeFetch;
     }
-    return data;
+
+    this.logger.log(`Cache MISS: ${key} — fetching from source`);
+    const pendingFetch = (async () => {
+      const data = await fetcher();
+      const isEmpty = Array.isArray(data) && data.length === 0;
+      if (!isEmpty) {
+        await this.set(key, data, ttlSeconds);
+      } else {
+        this.logger.warn(`Cache SKIP: ${key} — empty result, will retry next request`);
+      }
+      return data;
+    })();
+
+    this.inFlight.set(key, pendingFetch);
+
+    try {
+      return await pendingFetch;
+    } finally {
+      if (this.inFlight.get(key) === pendingFetch) {
+        this.inFlight.delete(key);
+      }
+    }
   }
 
   clear(pattern?: string): void {
     if (!pattern) {
       this.store.clear();
+      this.inFlight.clear();
       return;
     }
     for (const key of this.store.keys()) {
       if (key.startsWith(pattern)) this.store.delete(key);
+    }
+    for (const key of this.inFlight.keys()) {
+      if (key.startsWith(pattern)) this.inFlight.delete(key);
     }
   }
 }
