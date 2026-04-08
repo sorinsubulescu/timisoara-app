@@ -132,11 +132,15 @@ function getDirectionId(lineId: string, direction: ApiTransitDirection, index: n
 }
 
 function toDisplay(line: ApiTransitLine): TransitLine {
-  const directions = (line.directions?.length ? line.directions : [{
-    name: line.name,
-    stops: line.stops,
-    geometry: line.geometry,
-  }]).map((direction, index) => ({
+  const directionsSource = line.directions?.length
+    ? line.directions
+    : [{
+        name: line.name,
+        stops: line.stops ?? [],
+        geometry: line.geometry,
+      }];
+
+  const directions = directionsSource.map((direction, index) => ({
     id: getDirectionId(line.id, direction, index),
     label: directionLabel(direction.name, line.lineNumber),
     stops: direction.stops.map(mapStop),

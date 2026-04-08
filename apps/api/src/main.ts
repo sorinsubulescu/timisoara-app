@@ -5,6 +5,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { BigIntSerializerInterceptor } from './common/bigint-serializer.interceptor';
 
+const compression = require('compression');
+
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
   const isTransitOnlyApi = process.env.TRANSIT_ONLY_API === 'true'
@@ -12,6 +14,8 @@ async function bootstrap() {
   const enableSwagger = process.env.ENABLE_SWAGGER === 'true'
     || (!isProduction && process.env.ENABLE_SWAGGER !== 'false');
   const app = await NestFactory.create(AppModule);
+
+  app.use(compression({ threshold: 1024 }));
 
   app.enableCors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:3000',

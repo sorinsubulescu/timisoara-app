@@ -1,4 +1,6 @@
 import {
+  AppState,
+  type AppStateStatus,
   View,
   Text,
   ScrollView,
@@ -9,6 +11,7 @@ import {
   Modal,
   Animated,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, {
@@ -21,8 +24,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import {
   API_BASE,
+  type ApiTransitLine,
+  type ApiVehiclePosition,
   fetchTransitLines,
-  fetchTransitStops,
   fetchVehiclePositions,
 } from '@/lib/api';
 import {
@@ -42,6 +46,8 @@ const WARM_100 = '#f4efe9';
 const WARM_200 = '#ebe1d4';
 const SHEET_HIDDEN_OFFSET = 180;
 const SHEET_CLOSE_OFFSET = 260;
+const DEFAULT_VEHICLE_POLL_INTERVAL_MS = 60000;
+const ACTIVE_ROUTE_VEHICLE_POLL_INTERVAL_MS = 30000;
 
 const FILTERS: { value: FilterType; icon: string }[] = [
   { value: 'all', icon: 'location-outline' },
@@ -81,6 +87,26 @@ function getCurrentDirection(line: TransitLine, index: number) {
 
 function stopRenderKey(stopId: string, index: number) {
   return `${stopId}-${index}`;
+}
+
+function countUniqueTransitStops(lines: ApiTransitLine[]): number {
+  const stopIds = new Set<string>();
+
+  for (const line of lines) {
+    const directions = line.directions?.length
+      ? line.directions
+      : line.stops
+        ? [{ name: line.name, stops: line.stops, geometry: line.geometry }]
+        : [];
+
+    for (const direction of directions) {
+      for (const stop of direction.stops) {
+        stopIds.add(stop.id);
+      }
+    }
+  }
+
+  return stopIds.size;
 }
 
 function formatPlural(
@@ -195,14 +221,20 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
         return;
       }
 
+      const nextPosition = {
+        latitude: vehicle.latitude,
+        longitude: vehicle.longitude,
+        latitudeDelta: 0,
+        longitudeDelta: 0,
+      };
+
       existing
         .timing({
-          latitude: vehicle.latitude,
-          longitude: vehicle.longitude,
+          toValue: nextPosition,
           duration: 24000,
           easing: Easing.linear,
           useNativeDriver: false,
-        })
+        } as never)
         .start();
     });
 
@@ -291,7 +323,7 @@ function RoutePreview({ color, direction, liveVehicles }: { color: string; direc
           {animatedVehicles.map(({ vehicle, coordinate }) => (
             <MarkerAnimated
               key={`vehicle-${vehicle.id}`}
-              coordinate={coordinate}
+              coordinate={coordinate as never}
               title={vehicle.headsign || 'Vehicle'}
               description={`${Math.round(vehicle.speed)} km/h`}
               anchor={{ x: 0.5, y: 0.62 }}
@@ -580,6 +612,8 @@ export default function TransitScreen() {
   const insets = useSafeAreaInsets();
   const sheetTranslateY = useRef(new Animated.Value(280)).current;
   const isSheetClosingRef = useRef(false);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const isFocusedRef = useRef(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
   const [activeSheet, setActiveSheet] = useState<SheetMode>(null);
@@ -587,54 +621,134 @@ export default function TransitScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeDirections, setActiveDirections] = useState<Record<string, number>>({});
   const [activeDetailViews, setActiveDetailViews] = useState<Record<string, DetailView>>({});
-  const [allLines, setAllLines] = useState<TransitLine[]>([]);
-  const [stopCount, setStopCount] = useState(0);
+  const [transitLines, setTransitLines] = useState<ApiTransitLine[]>([]);
+  const [vehiclePositions, setVehiclePositions] = useState<ApiVehiclePosition[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const localizedFilters = useMemo(
     () => FILTERS.map((item) => ({ ...item, label: t(`transit.filter.${item.value}`) })),
     [t],
   );
 
-  const loadTransitData = useCallback(async (isInitialLoad: boolean) => {
-    if (isInitialLoad) {
-      setInitialLoading(true);
-    } else {
-      setRefreshing(true);
-    }
+  const allLines = useMemo(
+    () => buildDisplayLines(transitLines, vehiclePositions),
+    [transitLines, vehiclePositions],
+  );
 
-    try {
-      setError(null);
-      const [lines, stops, vehicles] = await Promise.all([
-        fetchTransitLines(),
-        fetchTransitStops(),
+  const stopCount = useMemo(
+    () => countUniqueTransitStops(transitLines),
+    [transitLines],
+  );
+
+  const formatLoadError = useCallback(
+    (loadError: unknown) => {
+      const message = loadError instanceof Error ? loadError.message : t('transit.failedLoad');
+      return `${message} ${t('transit.checkApi', { api: API_BASE })}`;
+    },
+    [t],
+  );
+
+  const loadTransitSnapshot = useCallback(
+    async (
+      {
+        forceStaticRefresh = false,
+        showLoader = false,
+      }: { forceStaticRefresh?: boolean; showLoader?: boolean } = {},
+    ) => {
+      if (showLoader) {
+        setInitialLoading(true);
+      }
+
+      const [linesResult, vehiclesResult] = await Promise.allSettled([
+        fetchTransitLines({ forceRefresh: forceStaticRefresh }),
         fetchVehiclePositions(),
       ]);
 
-      setAllLines(buildDisplayLines(lines, vehicles));
-      setStopCount(stops.length);
-    } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : t('transit.failedLoad');
-      setError(`${message} ${t('transit.checkApi', { api: API_BASE })}`);
-    } finally {
-      if (isInitialLoad) {
+      const fallbackLines = transitLines;
+
+      if (linesResult.status === 'fulfilled') {
+        setTransitLines(linesResult.value);
+      }
+
+      if (vehiclesResult.status === 'fulfilled') {
+        setVehiclePositions(vehiclesResult.value);
+      }
+
+      const hasUsableLines = linesResult.status === 'fulfilled'
+        ? linesResult.value.length > 0
+        : fallbackLines.length > 0;
+
+      if (hasUsableLines || linesResult.status === 'fulfilled') {
+        setError(null);
+      }
+
+      if (linesResult.status === 'rejected' && !hasUsableLines) {
+        setError(formatLoadError(linesResult.reason));
+      } else if (vehiclesResult.status === 'rejected' && !hasUsableLines) {
+        setError(formatLoadError(vehiclesResult.reason));
+      }
+
+      if (showLoader) {
         setInitialLoading(false);
-      } else {
-        setRefreshing(false);
+      }
+    },
+    [formatLoadError, transitLines],
+  );
+
+  const loadVehicleData = useCallback(async () => {
+    try {
+      const nextVehicles = await fetchVehiclePositions();
+      setVehiclePositions(nextVehicles);
+    } catch (loadError) {
+      if (transitLines.length === 0) {
+        setError(formatLoadError(loadError));
+        setInitialLoading(false);
       }
     }
-  }, [t]);
+  }, [formatLoadError, transitLines.length]);
 
   useEffect(() => {
-    loadTransitData(true);
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      const previousAppState = appStateRef.current;
+      appStateRef.current = nextAppState;
 
-    const interval = setInterval(() => {
-      loadTransitData(false);
-    }, 30000);
+      if (
+        nextAppState === 'active'
+        && previousAppState !== 'active'
+        && isFocusedRef.current
+      ) {
+        void loadVehicleData();
+      }
+    });
 
-    return () => clearInterval(interval);
-  }, [loadTransitData]);
+    return () => {
+      subscription.remove();
+    };
+  }, [loadVehicleData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      isFocusedRef.current = true;
+      loadTransitSnapshot({ showLoader: transitLines.length === 0 });
+
+      const pollIntervalMs = expandedId
+        ? ACTIVE_ROUTE_VEHICLE_POLL_INTERVAL_MS
+        : DEFAULT_VEHICLE_POLL_INTERVAL_MS;
+
+      const interval = setInterval(() => {
+        if (appStateRef.current !== 'active') {
+          return;
+        }
+
+        void loadVehicleData();
+      }, pollIntervalMs);
+
+      return () => {
+        isFocusedRef.current = false;
+        clearInterval(interval);
+      };
+    }, [expandedId, loadTransitSnapshot, loadVehicleData, transitLines.length]),
+  );
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -823,7 +937,7 @@ export default function TransitScreen() {
             </View>
             <Text style={styles.emptyTitle}>{t('transit.dataUnavailable')}</Text>
             <Text style={styles.emptyDescription}>{error}</Text>
-            <TouchableOpacity onPress={() => loadTransitData(true)}>
+            <TouchableOpacity onPress={() => loadTransitSnapshot({ forceStaticRefresh: true, showLoader: true })}>
               <Text style={styles.emptyAction}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
